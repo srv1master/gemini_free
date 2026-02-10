@@ -2,6 +2,18 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [1.3.0] - 2026-02-10
+
+### 🗂️ Multi-Chat & Session Management
+- **Parallele Chats:** Unterstützung für mehrere unabhängige Konversationen. Jeder Chat wird in einem eigenen Unterverzeichnis unter `chats/` gespeichert.
+- **Sidebar-Navigation:** Neues ausklappbares Seitenmenü in der Web-UI zum schnellen Wechseln zwischen Chats und zum Erstellen neuer Sessions.
+- **API-Erweiterung:** Neue Endpunkte `/api/chats` (List) und `/api/chats` (Create) sowie `chatId`-Support für alle bestehenden API-Routen.
+
+### 🎨 UI/UX Erweiterungen
+- **Modernes Sidebar-Layout:** Dezent gestaltete Seitenleiste mit "New Chat" Funktion.
+- **Session-Feedback:** Klare Benennung der Chats (Standard Chat, Session 123...) in der Sidebar.
+
+---
 ## [1.2.0] - 2026-02-10
 
 ### 🕵️ Stealth & Anonymisierung

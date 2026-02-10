@@ -9,6 +9,10 @@ const INSTALL_ID_FILE = path.join(SCRIPT_DIR, 'installation_id');
 const SECRETS_FILE = path.join(SCRIPT_DIR, 'secrets.json');
 const HISTORY_FILE = path.join(SCRIPT_DIR, 'history.json');
 const CONFIG_FILE = path.join(SCRIPT_DIR, 'config.json');
+const CHATS_DIR = path.join(SCRIPT_DIR, 'chats');
+
+// Sicherstellen, dass Chats-Verzeichnis existiert
+if (!fs.existsSync(CHATS_DIR)) fs.mkdirSync(CHATS_DIR);
 
 // Konfiguration laden
 const config = fs.existsSync(CONFIG_FILE)
@@ -21,7 +25,8 @@ const config = fs.existsSync(CONFIG_FILE)
         RETRY_DELAY_MS: 1000,
         TIMEZONE: "Europe/Berlin",
         LOCALE: "de-DE",
-        APP_NAME: "MyAI Control Panel"
+        APP_NAME: "MyAI Control Panel",
+        LOADING_TEXT: "KI analysiert"
       };
 
 // OAuth Konfiguration laden
@@ -34,16 +39,24 @@ const CLIENT_SECRET = secrets.CLIENT_SECRET;
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Historie laden/speichern
-function loadHistory() {
-    if (fs.existsSync(HISTORY_FILE)) {
-        try { return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')); } catch (e) { return []; }
+// Historie laden/speichern (Multi-Chat Support)
+function getChatDir(chatId) {
+    const dir = path.join(CHATS_DIR, chatId);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+
+function loadHistory(chatId = "default") {
+    const historyPath = path.join(getChatDir(chatId), 'history.json');
+    if (fs.existsSync(historyPath)) {
+        try { return JSON.parse(fs.readFileSync(historyPath, 'utf8')); } catch (e) { return []; }
     }
     return [];
 }
 
-function saveHistory(history) {
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+function saveHistory(history, chatId = "default") {
+    const historyPath = path.join(getChatDir(chatId), 'history.json');
+    fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
 }
 
 async function refreshAccessToken() {
@@ -92,7 +105,7 @@ const serveFile = (res, filePath, contentType) => {
 };
 
 // Helper: Logik aus gemini-direct.js
-async function askGemini(userPrompt, retryCount = 0) {
+async function askGeminiExtended(userPrompt, chatId = "default", retryCount = 0) {
     const MAX_RETRIES = config.MAX_RETRIES;
     if (!fs.existsSync(CREDS_FILE)) {
         throw new Error('Credentials (oauth_creds.json) nicht gefunden. Bitte zuerst login ausführen.');
@@ -105,8 +118,8 @@ async function askGemini(userPrompt, retryCount = 0) {
     const installId = fs.readFileSync(INSTALL_ID_FILE, 'utf8').replace(/[\r\n]/g, '').trim();
     let accessToken = creds.access_token;
 
-    // Historie laden
-    let history = loadHistory();
+    // Historie für spezifischen Chat laden
+    let history = loadHistory(chatId);
     const now = new Date().toLocaleString(config.LOCALE, { timeZone: config.TIMEZONE });
     
     // Aktuelle Nachricht mit Zeitstempel erstellen
@@ -146,14 +159,14 @@ async function askGemini(userPrompt, retryCount = 0) {
 
         if (loadResp.status === 401 && retryCount === 0) {
             accessToken = await refreshAccessToken();
-            return askGemini(userPrompt, retryCount + 1);
+            return askGeminiExtended(userPrompt, chatId, retryCount + 1);
         }
 
         if (loadResp.status === 429 && retryCount < MAX_RETRIES) {
             const waitTime = Math.pow(2, retryCount) * config.RETRY_DELAY_MS + Math.random() * 1000;
-            console.log(`API Limit (429) bei Init. Warte ${Math.round(waitTime/1000)}s... (${retryCount + 1}/${MAX_RETRIES})`);
+            console.log(`[${chatId}] API Limit (429) bei Init. Warte ${Math.round(waitTime/1000)}s... (${retryCount + 1}/${MAX_RETRIES})`);
             await sleep(waitTime);
-            return askGemini(userPrompt, retryCount + 1);
+            return askGeminiExtended(userPrompt, chatId, retryCount + 1);
         }
 
         if (!loadResp.ok) throw new Error(`Init Fehler: ${loadResp.statusText} (${loadResp.status})`);
@@ -178,9 +191,9 @@ async function askGemini(userPrompt, retryCount = 0) {
 
         if (genResp.status === 429 && retryCount < MAX_RETRIES) {
             const waitTime = Math.pow(2, retryCount) * config.RETRY_DELAY_MS + Math.random() * 1000;
-            console.log(`API Limit (429) bei Generierung. Warte ${Math.round(waitTime/1000)}s... (${retryCount + 1}/${MAX_RETRIES})`);
+            console.log(`[${chatId}] API Limit (429) bei Generierung. Warte ${Math.round(waitTime/1000)}s... (${retryCount + 1}/${MAX_RETRIES})`);
             await sleep(waitTime);
-            return askGemini(userPrompt, retryCount + 1);
+            return askGeminiExtended(userPrompt, chatId, retryCount + 1);
         }
 
         if (!genResp.ok) {
@@ -202,7 +215,7 @@ async function askGemini(userPrompt, retryCount = 0) {
             });
             
             if (history.length > config.HISTORY_LIMIT) history = history.slice(-config.HISTORY_LIMIT);
-            saveHistory(history);
+            saveHistory(history, chatId);
             
             return { text: botText, timestamp: botNow, userTimestamp: now };
         } else {
@@ -211,13 +224,13 @@ async function askGemini(userPrompt, retryCount = 0) {
     } catch (err) {
         if (err.message.includes('401') && retryCount === 0) {
             await refreshAccessToken();
-            return askGemini(userPrompt, retryCount + 1);
+            return askGeminiExtended(userPrompt, chatId, retryCount + 1);
         }
         if (err.message.includes('429') && retryCount < MAX_RETRIES) {
             const waitTime = Math.pow(2, retryCount) * config.RETRY_DELAY_MS + Math.random() * 1000;
-            console.log(`Limit (429) erkannt. Warte ${Math.round(waitTime/1000)}s...`);
+            console.log(`[${chatId}] Limit (429) erkannt. Warte ${Math.round(waitTime/1000)}s...`);
             await sleep(waitTime);
-            return askGemini(userPrompt, retryCount + 1);
+            return askGeminiExtended(userPrompt, chatId, retryCount + 1);
         }
         throw err;
     }
@@ -242,10 +255,32 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Route: GET /api/history -> Historie abrufen
-    if (req.method === 'GET' && req.url === '/api/history') {
-        const history = loadHistory();
+    if (req.method === 'GET' && req.url.startsWith('/api/history')) {
+        const urlObj = new URL(req.url, `http://${req.headers.host}`);
+        const chatId = urlObj.searchParams.get('chatId') || "default";
+        const history = loadHistory(chatId);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ history }));
+        return;
+    }
+
+    // Route: GET /api/chats -> Alle Chats auflisten
+    if (req.method === 'GET' && req.url === '/api/chats') {
+        const chats = fs.readdirSync(CHATS_DIR).filter(file => {
+            return fs.statSync(path.join(CHATS_DIR, file)).isDirectory();
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ chats }));
+        return;
+    }
+
+    // Route: POST /api/chats -> Neuen Chat erstellen
+    if (req.method === 'POST' && req.url === '/api/chats') {
+        const chatId = "Chat_" + Date.now();
+        getChatDir(chatId);
+        saveHistory([], chatId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ chatId }));
         return;
     }
 
@@ -262,19 +297,26 @@ const server = http.createServer(async (req, res) => {
 
     // Route: POST /api/clear -> Historie löschen
     if (req.method === 'POST' && req.url === '/api/clear') {
-        saveHistory([]);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', () => {
+            const { chatId } = JSON.parse(body || '{}');
+            saveHistory([], chatId || "default");
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true }));
+        });
         return;
     }
 
-    // Route: POST /api/chat -> Gemini Anfrage
+    // Route: POST /api/chat -> MyAI Anfrage
     if (req.method === 'POST' && req.url === '/api/chat') {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', async () => {
             try {
-                const { prompt, index } = JSON.parse(body);
+                const { prompt, index, chatId } = JSON.parse(body);
+                const id = chatId || "default";
+                
                 if (!prompt) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: "Kein Prompt angegeben" }));
@@ -283,18 +325,16 @@ const server = http.createServer(async (req, res) => {
 
                 // Falls ein Index übergeben wurde (Edit-Modus), Historie SOFORT kürzen
                 if (typeof index === 'number') {
-                    let history = loadHistory();
+                    let history = loadHistory(id);
                     if (index >= 0 && index < history.length) {
-                        console.log(`[EDIT] Kürze Historie: Entferne alles ab Index ${index} (Alt: ${history.length} Einträge)`);
+                        console.log(`[EDIT] [${id}] Kürze Historie: Entferne alles ab Index ${index}`);
                         history = history.slice(0, index);
-                        saveHistory(history);
-                        console.log(`[EDIT] Neue Historien-Größe: ${history.length}`);
+                        saveHistory(history, id);
                     }
                 }
 
-                // WICHTIG: askGemini liest loadHistory() intern. 
-                // Da wir saveHistory() oben gerufen haben, liest es die gekürzte Version.
-                const answer = await askGemini(prompt);
+                // Hier muss askGemini angepasst werden, um die chatId zu verwenden
+                const answer = await askGeminiExtended(prompt, id);
                 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ answer }));
