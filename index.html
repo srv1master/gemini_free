@@ -46,9 +46,23 @@
         .new-chat-btn:hover { background: #444; }
 
         #chat-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 5px; }
-        .chat-item { padding: 10px; border-radius: 5px; cursor: pointer; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ccc; transition: background 0.2s; }
+        .chat-item { 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-size: 0.9rem; 
+            color: #ccc; 
+            transition: background 0.2s; 
+        }
         .chat-item:hover { background: #2a2d2e; }
         .chat-item.active { background: #37373d; color: white; border-left: 3px solid var(--accent-color); }
+        .chat-item .actions { display: none; gap: 5px; }
+        .chat-item:hover .actions { display: flex; }
+        .chat-item .actions button { background: none; border: none; color: #888; cursor: pointer; padding: 2px; font-size: 0.8rem; }
+        .chat-item .actions button:hover { color: white; }
 
         /* Main Content */
         #main-content {
@@ -164,6 +178,45 @@
         pre code { background: transparent; padding: 0; }
         a { color: var(--accent-color); }
 
+        /* Modal Styles */
+        #modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(3px);
+        }
+        .modal-box {
+            background: var(--sidebar-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid #444;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            animation: modalIn 0.2s ease-out;
+        }
+        .modal-box h3 { margin-top: 0; color: white; }
+        .modal-box p { color: #ccc; font-size: 0.95rem; line-height: 1.4; }
+        .modal-input {
+            width: 100%;
+            background: #111;
+            border: 1px solid #444;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 15px 0;
+            box-sizing: border-box;
+        }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .modal-actions button { padding: 8px 20px; border-radius: 6px; cursor: pointer; border: none; font-weight: bold; }
+        .modal-confirm { background: var(--accent-color); color: white; }
+        .modal-cancel { background: #444; color: #ccc; }
+
+        @keyframes modalIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
@@ -201,6 +254,19 @@
     </div>
 </div>
 
+<!-- MyAI Modal -->
+<div id="modal-overlay">
+    <div class="modal-box">
+        <h3 id="modal-title">Titel</h3>
+        <p id="modal-message">Nachricht</p>
+        <input type="text" id="modal-input" class="modal-input" style="display:none;">
+        <div class="modal-actions">
+            <button id="modal-cancel-btn" class="modal-cancel">Abbrechen</button>
+            <button id="modal-confirm-btn" class="modal-confirm">Bestätigen</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const chatContainer = document.getElementById('chat-container');
     const input = document.getElementById('promptInput');
@@ -209,19 +275,50 @@
     const sidebar = document.getElementById('sidebar');
     const appTitle = document.getElementById('appTitle');
 
+    // Modal Elemente
+    const modalOverlay = document.getElementById('modal-overlay');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const modalInput = document.getElementById('modal-input');
+    const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+    const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
     let currentChatId = "default";
     let APP_NAME = "MyAI";
     let LOADING_TEXT = "KI analysiert";
 
+    // Modal Logik
+    function showModal({ title, message, showInput = false, defaultValue = "", confirmLabel = "OK", onConfirm }) {
+        modalTitle.innerText = title;
+        modalMessage.innerText = message;
+        modalConfirmBtn.innerText = confirmLabel;
+        modalInput.style.display = showInput ? 'block' : 'none';
+        modalInput.value = defaultValue;
+        modalOverlay.style.display = 'flex';
+
+        const handleConfirm = () => {
+            const value = showInput ? modalInput.value : true;
+            onConfirm(value);
+            closeModal();
+        };
+
+        modalConfirmBtn.onclick = handleConfirm;
+        modalCancelBtn.onclick = closeModal;
+        
+        if (showInput) {
+            setTimeout(() => modalInput.focus(), 100);
+            modalInput.onkeydown = (e) => { if (e.key === 'Enter') handleConfirm(); };
+        }
+    }
+
+    function closeModal() { modalOverlay.style.display = 'none'; }
+
     window.onload = async () => {
         await applyConfig();
         await loadChatList();
-        await selectChat("default");
     };
 
-    function toggleSidebar() {
-        sidebar.classList.toggle('collapsed');
-    }
+    function toggleSidebar() { sidebar.classList.toggle('collapsed'); }
 
     async function applyConfig() {
         try {
@@ -243,22 +340,85 @@
             const data = await response.json();
             chatList.innerHTML = '';
             
-            chatList.appendChild(createChatItem("default", "Standard Chat"));
-
-            data.chats.forEach(id => {
-                if (id !== "default") {
-                    chatList.appendChild(createChatItem(id, id.replace('Chat_', 'Session ')));
+            if (data.chats && data.chats.length > 0) {
+                data.chats.forEach(id => {
+                    chatList.appendChild(createChatItem(id, id.replace(/Chat_|Session_/g, '').replace(/_/g, ' ')));
+                });
+                if (currentChatId === "default" || !data.chats.includes(currentChatId)) {
+                    await selectChat(data.chats[0]);
                 }
-            });
+            }
         } catch (err) { console.error('Chat-List-Fehler:', err); }
     }
 
     function createChatItem(id, label) {
         const div = document.createElement('div');
         div.className = `chat-item ${id === currentChatId ? 'active' : ''}`;
-        div.innerText = label;
-        div.onclick = () => selectChat(id);
+        const span = document.createElement('span');
+        span.innerText = label;
+        span.style.flex = "1";
+        span.style.overflow = "hidden";
+        span.style.textOverflow = "ellipsis";
+        span.onclick = () => selectChat(id);
+        const actions = document.createElement('div');
+        actions.className = "actions";
+        const editBtn = document.createElement('button');
+        editBtn.innerHTML = "✎";
+        editBtn.onclick = (e) => { e.stopPropagation(); renameChat(id); };
+        const delBtn = document.createElement('button');
+        delBtn.innerHTML = "🗑";
+        delBtn.onclick = (e) => { e.stopPropagation(); deleteChat(id); };
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        div.appendChild(span);
+        div.appendChild(actions);
         return div;
+    }
+
+    async function renameChat(id) {
+        const currentLabel = id.replace(/Chat_|Session_/g, '').replace(/_/g, ' ');
+        showModal({
+            title: "Chat umbenennen",
+            message: "Gib einen neuen Namen für diesen Chat ein:",
+            showInput: true,
+            defaultValue: currentLabel,
+            confirmLabel: "Speichern",
+            onConfirm: async (newName) => {
+                if (!newName || newName === currentLabel) return;
+                const formattedName = newName.trim().replace(/\s+/g, '_');
+                try {
+                    const response = await fetch('/api/rename', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chatId: id, newName: formattedName })
+                    });
+                    const data = await response.json();
+                    if (response.status === 409) { alert(data.error); return renameChat(id); }
+                    currentChatId = data.newChatId;
+                    await loadChatList();
+                    await selectChat(currentChatId);
+                } catch (err) { alert("Fehler: " + err.message); }
+            }
+        });
+    }
+
+    async function deleteChat(id) {
+        showModal({
+            title: "Chat löschen",
+            message: `Chat "${id.replace(/_/g, ' ')}" wirklich löschen?`,
+            confirmLabel: "Löschen",
+            onConfirm: async () => {
+                try {
+                    await fetch('/api/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chatId: id })
+                    });
+                    currentChatId = "default";
+                    await loadChatList();
+                } catch (err) { alert("Fehler: " + err.message); }
+            }
+        });
     }
 
     async function createNewChat() {
@@ -273,9 +433,8 @@
     async function selectChat(id) {
         currentChatId = id;
         document.querySelectorAll('.chat-item').forEach(item => {
-            const isDefault = (id === "default" && item.innerText === "Standard Chat");
-            const isSession = item.innerText === id.replace('Chat_', 'Session ');
-            item.classList.toggle('active', isDefault || isSession);
+            const isMatch = item.querySelector('span').innerText === id.replace(/Chat_|Session_/g, '').replace(/_/g, ' ');
+            item.classList.toggle('active', isMatch);
         });
         await loadChatHistory(id);
     }
@@ -287,183 +446,94 @@
             chatContainer.innerHTML = '';
             if (data.history && data.history.length > 0) {
                 data.history.forEach((msg, index) => {
-                    const className = msg.role === 'user' ? 'user-message' : 'bot-message';
-                    appendMessage(msg.parts[0].text, className, msg.role === 'model', index, msg.timestamp);
+                    appendMessage(msg.parts[0].text, msg.role === 'user' ? 'user-message' : 'bot-message', msg.role === 'model', index, msg.timestamp);
                 });
             } else {
-                chatContainer.innerHTML = `<div class="message bot-message">System bereit. Neue Konversation in [${chatId}] gestartet.</div>`;
+                chatContainer.innerHTML = `<div class="message bot-message">System bereit. Neue Session [${chatId.replace(/_/g, ' ')}] gestartet.</div>`;
             }
             scrollToBottom();
         } catch (err) { console.error('History-Fehler:', err); }
     }
 
     async function clearChat() {
-        if (!confirm('Diesen Chatverlauf löschen?')) return;
-        try {
-            await fetch('/api/clear', { 
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chatId: currentChatId })
-            });
-            chatContainer.innerHTML = `<div class="message bot-message">System-Log für [${currentChatId}] bereinigt.</div>`;
-        } catch (err) { alert('Lösch-Fehler: ' + err.message); }
+        showModal({
+            title: "Verlauf leeren",
+            message: `Verlauf von "${currentChatId.replace(/_/g, ' ')}" löschen?`,
+            confirmLabel: "Leeren",
+            onConfirm: async () => {
+                try {
+                    await fetch('/api/clear', { 
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chatId: currentChatId })
+                    });
+                    chatContainer.innerHTML = `<div class="message bot-message">Verlauf bereinigt.</div>`;
+                } catch (err) { alert('Fehler: ' + err.message); }
+            }
+        });
     }
 
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
 
     async function sendMessage(textOverride = null, indexToTruncate = null) {
         const text = textOverride || input.value.trim();
         if (!text) return;
-
         const now = new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
-
         if (indexToTruncate !== null) {
-            const messages = Array.from(chatContainer.querySelectorAll('.message'));
-            messages.forEach(m => {
-                if (m.dataset.index !== undefined && parseInt(m.dataset.index) >= indexToTruncate) m.remove();
-            });
+            Array.from(chatContainer.querySelectorAll('.message')).forEach(m => { if (m.dataset.index !== undefined && parseInt(m.dataset.index) >= indexToTruncate) m.remove(); });
             appendMessage(text, 'user-message', false, indexToTruncate, now);
         } else if (!textOverride) {
-            const nextIndex = chatContainer.querySelectorAll('.message').length;
-            appendMessage(text, 'user-message', false, nextIndex, now);
+            appendMessage(text, 'user-message', false, chatContainer.querySelectorAll('.message').length, now);
             input.value = '';
         }
-        
-        input.disabled = true;
-        sendBtn.disabled = true;
-
+        input.disabled = true; sendBtn.disabled = true;
         const loadingId = 'loading-' + Date.now();
         const loadingDiv = document.createElement('div');
-        loadingDiv.id = loadingId;
-        loadingDiv.className = 'message bot-message loading';
+        loadingDiv.id = loadingId; loadingDiv.className = 'message bot-message loading';
         loadingDiv.innerHTML = `${LOADING_TEXT}<span class="dots"><span>.</span><span>.</span><span>.</span></span> <span class="timer" id="timer-${loadingId}">00:00:00.0</span>`;
-        chatContainer.appendChild(loadingDiv);
-        scrollToBottom();
-
+        chatContainer.appendChild(loadingDiv); scrollToBottom();
         let seconds = 0;
         const timerElement = document.getElementById(`timer-${loadingId}`);
         const timerInterval = setInterval(() => {
             seconds += 0.1;
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            const s = seconds % 60;
+            const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); const s = seconds % 60;
             timerElement.innerText = h.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ':' + s.toFixed(1).padStart(4, '0');
         }, 100);
-
         try {
-            const payload = { prompt: text, chatId: currentChatId };
-            if (indexToTruncate !== null) payload.index = indexToTruncate;
-
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            const data = await response.json();
-            clearInterval(timerInterval);
-            document.getElementById(loadingId).remove();
-
+            const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: text, chatId: currentChatId, index: indexToTruncate }) });
+            const data = await response.json(); clearInterval(timerInterval); document.getElementById(loadingId).remove();
             if (data.error) {
                 const isOverloaded = data.error.includes("429") || data.error.includes("RESOURCE_EXHAUSTED");
-                const errorText = isOverloaded ? "Ich bin gerade überlastet." : `❌ Fehler: ${data.error}`;
-                appendMessage(errorText, 'bot-message error-message', false, null, null, isOverloaded ? () => {
-                    const messages = Array.from(chatContainer.querySelectorAll('.message'));
-                    const lastMsg = messages[messages.length - 1];
-                    if (lastMsg) lastMsg.remove();
-                    sendMessage(text, indexToTruncate);
+                appendMessage(isOverloaded ? "Ich bin gerade überlastet." : `❌ Fehler: ${data.error}`, 'bot-message error-message', false, null, null, isOverloaded ? () => {
+                    const last = chatContainer.lastElementChild; if (last) last.remove(); sendMessage(text, indexToTruncate);
                 } : null);
-            } else {
-                const nextBotIndex = chatContainer.querySelectorAll('.message').length;
-                appendMessage(data.answer.text, 'bot-message', true, nextBotIndex, data.answer.timestamp);
-            }
-        } catch (err) {
-            clearInterval(timerInterval);
-            if (document.getElementById(loadingId)) document.getElementById(loadingId).remove();
-            appendMessage(`❌ Netzwerkfehler: ${err.message}`, 'bot-message error-message', false);
-        } finally {
-            input.disabled = false;
-            sendBtn.disabled = false;
-            if (!textOverride) input.focus();
-        }
+            } else { appendMessage(data.answer.text, 'bot-message', true, chatContainer.querySelectorAll('.message').length, data.answer.timestamp); }
+        } catch (err) { clearInterval(timerInterval); if (document.getElementById(loadingId)) document.getElementById(loadingId).remove(); appendMessage(`❌ Netzwerkfehler: ${err.message}`, 'bot-message error-message', false); }
+        finally { input.disabled = false; sendBtn.disabled = false; if (!textOverride) input.focus(); }
     }
 
     function appendMessage(text, className, isMarkdown = false, index = null, timestamp = null, onRetry = null) {
-        const msgDiv = document.createElement('div');
-        msgDiv.className = `message ${className}`;
-        if (index !== null) msgDiv.dataset.index = index;
-        
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'content-wrapper';
-        if (isMarkdown) {
-            contentDiv.innerHTML = marked.parse(text);
-            contentDiv.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
-        } else {
-            contentDiv.innerText = text;
-        }
-        
+        const msgDiv = document.createElement('div'); msgDiv.className = `message ${className}`; if (index !== null) msgDiv.dataset.index = index;
+        const contentDiv = document.createElement('div'); contentDiv.className = 'content-wrapper';
+        if (isMarkdown) { contentDiv.innerHTML = marked.parse(text); contentDiv.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block)); }
+        else { contentDiv.innerText = text; }
         msgDiv.appendChild(contentDiv);
-        if (timestamp) {
-            const timeSpan = document.createElement('span');
-            timeSpan.className = 'message-time';
-            timeSpan.innerText = timestamp;
-            msgDiv.appendChild(timeSpan);
-        }
-        if (onRetry) {
-            const retryBtn = document.createElement('button');
-            retryBtn.className = 'retry-btn';
-            retryBtn.innerText = 'Nochmal versuchen';
-            retryBtn.onclick = onRetry;
-            msgDiv.appendChild(retryBtn);
-        }
-        if (className.includes('user-message')) {
-            const editBtn = document.createElement('button');
-            editBtn.className = 'edit-btn';
-            editBtn.innerHTML = '✎';
-            editBtn.onclick = () => startEdit(msgDiv, text, index);
-            msgDiv.appendChild(editBtn);
-        }
-        chatContainer.appendChild(msgDiv);
-        scrollToBottom();
+        if (timestamp) { const timeSpan = document.createElement('span'); timeSpan.className = 'message-time'; timeSpan.innerText = timestamp; msgDiv.appendChild(timeSpan); }
+        if (onRetry) { const rb = document.createElement('button'); rb.className = 'retry-btn'; rb.innerText = 'Nochmal versuchen'; rb.onclick = onRetry; msgDiv.appendChild(rb); }
+        if (className.includes('user-message')) { const eb = document.createElement('button'); eb.className = 'edit-btn'; eb.innerHTML = '✎'; eb.onclick = () => startEdit(msgDiv, text, index); msgDiv.appendChild(eb); }
+        chatContainer.appendChild(msgDiv); scrollToBottom();
     }
 
     function startEdit(msgDiv, originalText, index) {
-        const contentWrapper = msgDiv.querySelector('.content-wrapper');
-        const editBtn = msgDiv.querySelector('.edit-btn');
-        contentWrapper.style.display = 'none';
-        editBtn.style.display = 'none';
-        const editContainer = document.createElement('div');
-        editContainer.className = 'edit-container';
-        const textarea = document.createElement('textarea');
-        textarea.className = 'edit-textarea';
-        textarea.value = originalText;
-        const actions = document.createElement('div');
-        actions.className = 'edit-actions';
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'cancel-btn';
-        cancelBtn.innerText = 'Abbrechen';
-        cancelBtn.onclick = () => { editContainer.remove(); contentWrapper.style.display = 'block'; editBtn.style.display = ''; };
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'save-btn';
-        saveBtn.innerText = 'Speichern & Senden';
-        saveBtn.onclick = () => {
-            const newText = textarea.value.trim();
-            if (newText && newText !== originalText) {
-                editContainer.remove();
-                sendMessage(newText, index);
-            } else { cancelBtn.onclick(); }
-        };
-        actions.appendChild(cancelBtn);
-        actions.appendChild(saveBtn);
-        editContainer.appendChild(textarea);
-        editContainer.appendChild(actions);
-        msgDiv.appendChild(editContainer);
-        textarea.focus();
+        const cw = msgDiv.querySelector('.content-wrapper'); const eb = msgDiv.querySelector('.edit-btn'); cw.style.display = 'none'; eb.style.display = 'none';
+        const ec = document.createElement('div'); ec.className = 'edit-container';
+        const ta = document.createElement('textarea'); ta.className = 'edit-textarea'; ta.value = originalText;
+        const acts = document.createElement('div'); acts.className = 'edit-actions';
+        const cb = document.createElement('button'); cb.className = 'cancel-btn'; cb.innerText = 'Abbrechen';
+        cb.onclick = () => { ec.remove(); cw.style.display = 'block'; eb.style.display = ''; };
+        const sb = document.createElement('button'); sb.className = 'save-btn'; sb.innerText = 'Speichern & Senden';
+        sb.onclick = () => { const nt = ta.value.trim(); if (nt && nt !== originalText) { ec.remove(); sendMessage(nt, index); } else { cb.onclick(); } };
+        acts.appendChild(cb); acts.appendChild(sb); ec.appendChild(ta); ec.appendChild(acts); msgDiv.appendChild(ec); ta.focus();
     }
 
     function scrollToBottom() { chatContainer.scrollTop = chatContainer.scrollHeight; }

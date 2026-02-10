@@ -46,7 +46,8 @@ function getChatDir(chatId) {
     return dir;
 }
 
-function loadHistory(chatId = "default") {
+function loadHistory(chatId) {
+    if (!chatId) return [];
     const historyPath = path.join(getChatDir(chatId), 'history.json');
     if (fs.existsSync(historyPath)) {
         try { return JSON.parse(fs.readFileSync(historyPath, 'utf8')); } catch (e) { return []; }
@@ -54,9 +55,17 @@ function loadHistory(chatId = "default") {
     return [];
 }
 
-function saveHistory(history, chatId = "default") {
+function saveHistory(history, chatId) {
+    if (!chatId) return;
     const historyPath = path.join(getChatDir(chatId), 'history.json');
     fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
+}
+
+// Initialer Check: Falls keine Chats existieren, erstelle einen
+if (fs.readdirSync(CHATS_DIR).length === 0) {
+    const initialId = "Mein_erster_Chat";
+    getChatDir(initialId);
+    saveHistory([], initialId);
 }
 
 async function refreshAccessToken() {
@@ -281,6 +290,77 @@ const server = http.createServer(async (req, res) => {
         saveHistory([], chatId);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ chatId }));
+        return;
+    }
+
+    // Route: POST /api/rename -> Chat umbenennen
+    if (req.method === 'POST' && req.url === '/api/rename') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', () => {
+            try {
+                const { chatId, newName } = JSON.parse(body || '{}');
+                if (!chatId || !newName) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: "Fehlende Daten" }));
+                }
+                
+                const oldPath = path.join(CHATS_DIR, chatId);
+                const newPath = path.join(CHATS_DIR, newName);
+
+                if (fs.existsSync(newPath)) {
+                    res.writeHead(409, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: "Ein Chat mit diesem Namen existiert bereits. Bitte wähle einen anderen Namen." }));
+                }
+
+                if (!fs.existsSync(oldPath)) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: "Quell-Chat nicht gefunden." }));
+                }
+
+                fs.renameSync(oldPath, newPath);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, newChatId: newName }));
+            } catch (e) {
+                console.error("Rename Error:", e);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // Route: POST /api/delete -> Chat vollständig löschen
+    if (req.method === 'POST' && req.url === '/api/delete') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', () => {
+            try {
+                const { chatId } = JSON.parse(body || '{}');
+                if (!chatId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ error: "Keine Chat ID angegeben" }));
+                }
+                
+                const chatPath = path.join(CHATS_DIR, chatId);
+                if (fs.existsSync(chatPath)) {
+                    fs.rmSync(chatPath, { recursive: true, force: true });
+                }
+                
+                // Falls alles gelöscht wurde, erstelle sofort einen neuen Standard-Chat
+                if (fs.readdirSync(CHATS_DIR).length === 0) {
+                    const initialId = "Mein_erster_Chat";
+                    getChatDir(initialId);
+                    saveHistory([], initialId);
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
         return;
     }
 

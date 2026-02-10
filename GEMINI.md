@@ -30,13 +30,10 @@ Vollständiges Rebranding auf "MyAI". Alle Hinweise auf den Anbieter (Google/Gem
 - **Synchronisierte Edits:** Beim Bearbeiten einer Nachricht wird die Historie auf dem Server und in der UI ab diesem Punkt abgeschnitten (Truncate), um logische Konsistenz zu wahren.
 - **Zeitbewusstsein:** Nachrichten erhalten Timestamps, die in die API-Prompts injiziert werden (`[Zeitstempel: ...]`), damit die KI zeitliche Bezüge versteht.
 
-### 4. Resilienz & Performance
-- **Auto-Token-Refresh:** Der Server erneuert abgelaufene Access-Tokens automatisch.
-- **Exponential Backoff:** Intelligente Retry-Logik bei API-Limits (429) mit bis zu 5 Versuchen.
-- **Präzisions-UI:** Live-Stoppuhr (`HH:MM:SS.s`) und animierte Ladeindikatoren.
-
-### 5. Portabilität
-Alle Dateipfade sind absolut relativ (`path.join(__dirname, ...)`). Das Projekt ist sofort lauffähig, egal in welchem Verzeichnis es abgelegt wird.
+### 5. Präzisions-UI & Interaktion (v1.4.0)
+- **Live-Stoppuhr:** Echtzeit-Anzeige der Verarbeitungsdauer im Format `HH:MM:SS.s`.
+- **MyAI Modals:** Ein integriertes System für Dialoge und Eingabeaufforderungen, das native Browser-Fenster ersetzt und für Design-Konsistenz sorgt.
+- **Dynamische Sidebar:** Vollständig verzeichnisbasierte Anzeige aller Sessions im `chats/` Ordner.
 
 ## 🛠 Usage
 

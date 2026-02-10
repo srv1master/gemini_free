@@ -2,6 +2,22 @@
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [1.4.0] - 2026-02-10
+
+### 🎨 Custom UI & Interaktion
+- **MyAI Modal System:** Native Browser-Dialoge (`confirm`, `prompt`) wurden durch ein elegantes, modales Dialogsystem im MyAI-Design ersetzt.
+- **Flüssige Workflows:** Umbenennen und Löschen von Chats erfolgt nun über animierte Overlays mit direktem Fokus auf Eingabefelder.
+
+### ⚙️ Verfeinertes Session-Management
+- **Uneingeschränktes Löschen:** Alle Chats (auch initiale oder "default" benannte) können nun vollständig entfernt werden.
+- **Auto-Bootstrap:** Das System erkennt nun ein leeres Chat-Verzeichnis und erstellt bei Bedarf automatisch eine neue, saubere Arbeitsumgebung.
+- **Echte Portabilität:** Die "Standard Chat"-Logik wurde zugunsten einer rein verzeichnisbasierten Sidebar entfernt.
+
+### 🛡️ Stabilität & Bugfixes
+- **JSON-Header Fix:** API-Antworten senden nun garantiert den korrekten Content-Type, was Parsing-Fehler im Browser eliminiert.
+- **Robustes Error-Handling:** Verbesserte Validierung von Request-Bodys im Backend.
+
+---
 ## [1.3.0] - 2026-02-10
 
 ### 🗂️ Multi-Chat & Session Management
