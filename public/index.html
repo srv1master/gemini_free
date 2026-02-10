@@ -17,6 +17,7 @@
 <div id="sidebar">
     <div class="sidebar-header">
         <span style="font-weight: bold;">Meine Chats</span>
+        <button onclick="configureGlobalAgent()" title="Globaler System-Prompt (Master-Direktive)" style="background:none; border:none; color:var(--accent-color); cursor:pointer; font-size:1.2rem;">📡</button>
     </div>
     <div style="padding: 10px;">
         <button class="new-chat-btn" onclick="createNewChat()">+ Neuer Chat</button>
@@ -34,6 +35,7 @@
     </header>
 
     <div id="chat-container">
+        <div id="status-header"></div>
         <!-- Nachrichten hier -->
     </div>
 
@@ -51,6 +53,7 @@
         <h3 id="modal-title">Titel</h3>
         <p id="modal-message">Nachricht</p>
         <input type="text" id="modal-input" class="modal-input" style="display:none;">
+        <textarea id="modal-textarea" class="modal-input" style="display:none;"></textarea>
         <div class="modal-actions">
             <button id="modal-cancel-btn" class="modal-cancel">Abbrechen</button>
             <button id="modal-confirm-btn" class="modal-confirm">Bestätigen</button>

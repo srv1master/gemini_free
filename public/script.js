@@ -10,6 +10,7 @@ const modalOverlay = document.getElementById('modal-overlay');
 const modalTitle = document.getElementById('modal-title');
 const modalMessage = document.getElementById('modal-message');
 const modalInput = document.getElementById('modal-input');
+const modalTextarea = document.getElementById('modal-textarea');
 const modalConfirmBtn = document.getElementById('modal-confirm-btn');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 
@@ -18,16 +19,21 @@ let APP_NAME = "MyAI";
 let LOADING_TEXT = "KI analysiert";
 
 // Modal Logik
-function showModal({ title, message, showInput = false, defaultValue = "", confirmLabel = "OK", onConfirm }) {
+function showModal({ title, message, showInput = false, inputType = 'input', defaultValue = "", confirmLabel = "OK", onConfirm }) {
     modalTitle.innerText = title;
     modalMessage.innerText = message;
     modalConfirmBtn.innerText = confirmLabel;
-    modalInput.style.display = showInput ? 'block' : 'none';
-    modalInput.value = defaultValue;
+    
+    // Eingabetyp steuern
+    modalInput.style.display = (showInput && inputType === 'input') ? 'block' : 'none';
+    modalTextarea.style.display = (showInput && inputType === 'textarea') ? 'block' : 'none';
+    
+    const activeInput = inputType === 'textarea' ? modalTextarea : modalInput;
+    activeInput.value = defaultValue;
     modalOverlay.style.display = 'flex';
 
     const handleConfirm = () => {
-        const value = showInput ? modalInput.value : true;
+        const value = showInput ? activeInput.value : true;
         onConfirm(value);
         closeModal();
     };
@@ -36,8 +42,10 @@ function showModal({ title, message, showInput = false, defaultValue = "", confi
     modalCancelBtn.onclick = closeModal;
     
     if (showInput) {
-        setTimeout(() => modalInput.focus(), 100);
-        modalInput.onkeydown = (e) => { if (e.key === 'Enter') handleConfirm(); };
+        setTimeout(() => activeInput.focus(), 100);
+        activeInput.onkeydown = (e) => { 
+            if (e.key === 'Enter' && (inputType === 'input' || e.ctrlKey)) handleConfirm(); 
+        };
     }
 }
 
@@ -48,269 +56,230 @@ window.onload = async () => {
     await loadChatList();
 };
 
-    function toggleSidebar() {
+function toggleSidebar() {
+    sidebar.classList.toggle('open');
+}
 
-        sidebar.classList.toggle('open');
+async function applyConfig() {
+    try {
+        const response = await fetch('/api/config');
+        const config = await response.json();
+        if (config.APP_NAME) {
+            APP_NAME = config.APP_NAME;
+            document.title = APP_NAME + " - Private Intelligence";
+            appTitle.innerText = APP_NAME;
+            input.placeholder = `Eingabe an ${APP_NAME}... (Shift+Enter für neue Zeile)`;
+        }
+        if (config.LOADING_TEXT) LOADING_TEXT = config.LOADING_TEXT;
+    } catch (err) { console.error('Config-Fehler:', err); }
+}
 
-    }
-
-
-
-    async function applyConfig() {
-
-        try {
-
-            const response = await fetch('/api/config');
-
-            const config = await response.json();
-
-            if (config.APP_NAME) {
-
-                APP_NAME = config.APP_NAME;
-
-                document.title = APP_NAME + " - Private Intelligence";
-
-                appTitle.innerText = APP_NAME;
-
-                input.placeholder = `Eingabe an ${APP_NAME}... (Shift+Enter für neue Zeile)`;
-
-            }
-
-            if (config.LOADING_TEXT) LOADING_TEXT = config.LOADING_TEXT;
-
-        } catch (err) { console.error('Config-Fehler:', err); }
-
-    }
-
-
-
-    async function loadChatList() {
-
-        try {
-
-            const response = await fetch('/api/chats');
-
-            const data = await response.json();
-
-            chatList.innerHTML = '';
-
+async function loadChatList() {
+    try {
+        const response = await fetch('/api/chats');
+        const data = await response.json();
+        chatList.innerHTML = '';
+        
+        if (data.chats && data.chats.length > 0) {
+            data.chats.forEach(id => {
+                chatList.appendChild(createChatItem(id, id.replace(/Chat_|Session_/g, '').replace(/_/g, ' ')));
+            });
             
+            // Zuletzt verwendeten Chat laden
+            const targetId = data.lastChatId && data.chats.includes(data.lastChatId) 
+                ? data.lastChatId 
+                : data.chats[0];
+            
+            await selectChat(targetId, false);
+        }
+    } catch (err) { console.error('Chat-List-Fehler:', err); }
+}
 
-            if (data.chats && data.chats.length > 0) {
+function createChatItem(id, label) {
+    const div = document.createElement('div');
+    div.className = `chat-item ${id === currentChatId ? 'active' : ''}`;
+    const span = document.createElement('span');
+    span.innerText = label;
+    span.style.flex = "1";
+    span.style.overflow = "hidden";
+    span.style.textOverflow = "ellipsis";
+    span.onclick = () => selectChat(id);
+    const actions = document.createElement('div');
+    actions.className = "actions";
+    
+    const agentBtn = document.createElement('button');
+    agentBtn.innerHTML = "🤖";
+    agentBtn.title = "Agent-Konfiguration";
+    agentBtn.onclick = (e) => { e.stopPropagation(); configureAgent(id); };
+    
+    const editBtn = document.createElement('button');
+    editBtn.innerHTML = "✎";
+    editBtn.onclick = (e) => { e.stopPropagation(); renameChat(id); };
+    const delBtn = document.createElement('button');
+    delBtn.innerHTML = "🗑";
+    delBtn.onclick = (e) => { e.stopPropagation(); deleteChat(id); };
+    
+    actions.appendChild(agentBtn);
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+    div.appendChild(span);
+    div.appendChild(actions);
+    return div;
+}
 
-                data.chats.forEach(id => {
-
-                    chatList.appendChild(createChatItem(id, id.replace(/Chat_|Session_/g, '').replace(/_/g, ' ')));
-
-                });
-
-                if (currentChatId === "default" || !data.chats.includes(currentChatId)) {
-
-                    await selectChat(data.chats[0], false); // False = Sidebar nicht schließen beim Initialladen
-
-                }
-
-            }
-
-        } catch (err) { console.error('Chat-List-Fehler:', err); }
-
-    }
-
-
-
-    function createChatItem(id, label) {
-
-        const div = document.createElement('div');
-
-        div.className = `chat-item ${id === currentChatId ? 'active' : ''}`;
-
-        const span = document.createElement('span');
-
-        span.innerText = label;
-
-        span.style.flex = "1";
-
-        span.style.overflow = "hidden";
-
-        span.style.textOverflow = "ellipsis";
-
-        span.onclick = () => selectChat(id);
-
-        const actions = document.createElement('div');
-
-        actions.className = "actions";
-
-        const editBtn = document.createElement('button');
-
-        editBtn.innerHTML = "✎";
-
-        editBtn.onclick = (e) => { e.stopPropagation(); renameChat(id); };
-
-        const delBtn = document.createElement('button');
-
-        delBtn.innerHTML = "🗑";
-
-        delBtn.onclick = (e) => { e.stopPropagation(); deleteChat(id); };
-
-        actions.appendChild(editBtn);
-
-        actions.appendChild(delBtn);
-
-        div.appendChild(span);
-
-        div.appendChild(actions);
-
-        return div;
-
-    }
-
-
-
-    async function renameChat(id) {
-
-        const currentLabel = id.replace(/Chat_|Session_/g, '').replace(/_/g, ' ');
-
+async function configureAgent(id) {
+    try {
+        const resp = await fetch(`/api/history?chatId=${id}`);
+        const data = await resp.json();
         showModal({
-
-            title: "Chat umbenennen",
-
-            message: "Gib einen neuen Namen für diesen Chat ein:",
-
+            title: "Agenten-Konfiguration",
+            message: `Definiere den System-Prompt für "${id.replace(/_/g, ' ')}":`,
             showInput: true,
-
-            defaultValue: currentLabel,
-
+            inputType: 'textarea',
+            defaultValue: data.systemPrompt || "",
             confirmLabel: "Speichern",
-
-            onConfirm: async (newName) => {
-
-                if (!newName || newName === currentLabel) return;
-
-                const formattedName = newName.trim().replace(/\s+/g, '_');
-
-                try {
-
-                    const response = await fetch('/api/rename', {
-
-                        method: 'POST',
-
-                        headers: { 'Content-Type': 'application/json' },
-
-                        body: JSON.stringify({ chatId: id, newName: formattedName })
-
-                    });
-
-                    const data = await response.json();
-
-                    if (response.status === 409) { alert(data.error); return renameChat(id); }
-
-                    currentChatId = data.newChatId;
-
-                    await loadChatList();
-
-                    await selectChat(currentChatId, false);
-
-                } catch (err) { alert("Fehler: " + err.message); }
-
+            onConfirm: async (newPrompt) => {
+                await fetch('/api/system-prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatId: id, systemPrompt: newPrompt })
+                });
+                if (id === currentChatId) loadChatHistory(id);
             }
-
         });
+    } catch (err) { alert("Fehler: " + err.message); }
+}
 
-    }
+async function renameChat(id) {
+    const currentLabel = id.replace(/Chat_|Session_/g, '').replace(/_/g, ' ');
+    showModal({
+        title: "Chat umbenennen",
+        message: "Gib einen neuen Namen für diesen Chat ein:",
+        showInput: true,
+        defaultValue: currentLabel,
+        confirmLabel: "Speichern",
+        onConfirm: async (newName) => {
+            if (!newName || newName === currentLabel) return;
+            const formattedName = newName.trim().replace(/\s+/g, '_');
+            try {
+                const response = await fetch('/api/rename', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatId: id, newName: formattedName })
+                });
+                const data = await response.json();
+                if (response.status === 409) { alert(data.error); return renameChat(id); }
+                currentChatId = data.newChatId;
+                await loadChatList();
+            } catch (err) { alert("Fehler: " + err.message); }
+        }
+    });
+}
 
+async function deleteChat(id) {
+    showModal({
+        title: "Chat löschen",
+        message: `Chat "${id.replace(/_/g, ' ')}" wirklich löschen?`,
+        confirmLabel: "Löschen",
+        onConfirm: async () => {
+            try {
+                await fetch('/api/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatId: id })
+                });
+                currentChatId = "default";
+                await loadChatList();
+            } catch (err) { alert("Fehler: " + err.message); }
+        }
+    });
+}
 
+async function createNewChat() {
+    try {
+        const response = await fetch('/api/chats', { method: 'POST' });
+        const data = await response.json();
+        await loadChatList();
+    } catch (err) { alert('Fehler: ' + err.message); }
+}
 
-    async function deleteChat(id) {
+async function selectChat(id, shouldCloseSidebar = true) {
+    currentChatId = id;
+    
+    // Dem Server den aktuellen Chat mitteilen (für Persistenz)
+    try {
+        await fetch('/api/select-chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId: id })
+        });
+    } catch (e) { console.error("Session-Sync-Fehler:", e); }
 
+    document.querySelectorAll('.chat-item').forEach(item => {
+        const span = item.querySelector('span');
+        if (span) {
+            const isMatch = span.innerText === id.replace(/Chat_|Session_/g, '').replace(/_/g, ' ');
+            item.classList.toggle('active', isMatch);
+        }
+    });
+    await loadChatHistory(id);
+    if (shouldCloseSidebar) sidebar.classList.remove('open');
+}
+
+async function configureGlobalAgent() {
+    try {
+        const resp = await fetch('/api/config');
+        const data = await resp.json();
         showModal({
-
-            title: "Chat löschen",
-
-            message: `Chat "${id.replace(/_/g, ' ')}" wirklich löschen?`,
-
-            confirmLabel: "Löschen",
-
-            onConfirm: async () => {
-
-                try {
-
-                    await fetch('/api/delete', {
-
-                        method: 'POST',
-
-                        headers: { 'Content-Type': 'application/json' },
-
-                        body: JSON.stringify({ chatId: id })
-
-                    });
-
-                    currentChatId = "default";
-
-                    await loadChatList();
-
-                } catch (err) { alert("Fehler: " + err.message); }
-
+            title: "Master-Direktive (Global)",
+            message: "Dieser Befehl gilt für ALLE Chats und hat die höchste Priorität:",
+            showInput: true,
+            inputType: 'textarea',
+            defaultValue: data.GLOBAL_SYSTEM_PROMPT || "",
+            confirmLabel: "Master-Befehl speichern",
+            onConfirm: async (newPrompt) => {
+                await fetch('/api/global-prompt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ globalPrompt: newPrompt })
+                });
+                if (currentChatId !== "default") loadChatHistory(currentChatId);
             }
-
         });
-
-    }
-
-
-
-    async function createNewChat() {
-
-        try {
-
-            const response = await fetch('/api/chats', { method: 'POST' });
-
-            const data = await response.json();
-
-            await loadChatList();
-
-            await selectChat(data.chatId);
-
-        } catch (err) { alert('Fehler: ' + err.message); }
-
-    }
-
-
-
-    async function selectChat(id, shouldCloseSidebar = true) {
-
-        currentChatId = id;
-
-        document.querySelectorAll('.chat-item').forEach(item => {
-
-            const span = item.querySelector('span');
-
-            if (span) {
-
-                const isMatch = span.innerText === id.replace(/Chat_|Session_/g, '').replace(/_/g, ' ');
-
-                item.classList.toggle('active', isMatch);
-
-            }
-
-        });
-
-        await loadChatHistory(id);
-
-        if (shouldCloseSidebar) sidebar.classList.remove('open');
-
-    }
+    } catch (err) { alert("Fehler: " + err.message); }
+}
 
 async function loadChatHistory(chatId) {
     try {
         const response = await fetch(`/api/history?chatId=${chatId}`);
         const data = await response.json();
-        chatContainer.innerHTML = '';
+        chatContainer.innerHTML = '<div id="status-header"></div>';
+        const statusHeader = document.getElementById('status-header');
+        
+        if (data.globalPrompt) {
+            const masterBadge = document.createElement('div');
+            masterBadge.className = 'status-badge master';
+            masterBadge.innerHTML = '<div class="indicator"></div><span>📡 MASTER</span>';
+            masterBadge.title = "Klicken, um Master-Direktive zu bearbeiten";
+            masterBadge.onclick = () => configureGlobalAgent();
+            statusHeader.appendChild(masterBadge);
+        }
+
+        if (data.systemPrompt) {
+            const agentBadge = document.createElement('div');
+            agentBadge.className = 'status-badge agent';
+            agentBadge.innerHTML = '<div class="indicator"></div><span>🤖 AGENT</span>';
+            agentBadge.title = "Klicken, um lokalen Agenten zu bearbeiten";
+            agentBadge.onclick = () => configureAgent(chatId);
+            statusHeader.appendChild(agentBadge);
+        }
+
         if (data.history && data.history.length > 0) {
             data.history.forEach((msg, index) => {
                 appendMessage(msg.parts[0].text, msg.role === 'user' ? 'user-message' : 'bot-message', msg.role === 'model', index, msg.timestamp);
             });
         } else {
-            chatContainer.innerHTML = `<div class="message bot-message">System bereit. Neue Session [${chatId.replace(/_/g, ' ')}] gestartet.</div>`;
+            chatContainer.innerHTML += `<div class="message bot-message">System bereit. Neue Session [${chatId.replace(/_/g, ' ')}] gestartet.</div>`;
         }
         scrollToBottom();
     } catch (err) { console.error('History-Fehler:', err); }
@@ -373,75 +342,32 @@ async function sendMessage(textOverride = null, indexToTruncate = null) {
     finally { input.disabled = false; sendBtn.disabled = false; if (!textOverride) input.focus(); }
 }
 
-    function appendMessage(text, className, isMarkdown = false, index = null, timestamp = null, onRetry = null) {
-
-        const msgDiv = document.createElement('div'); msgDiv.className = `message ${className}`; if (index !== null) msgDiv.dataset.index = index;
-
-        const contentDiv = document.createElement('div'); contentDiv.className = 'content-wrapper';
-
-        
-
-        if (isMarkdown) { 
-
-            contentDiv.innerHTML = marked.parse(text); 
-
-            
-
-            // Code-Blöcke verarbeiten
-
-            contentDiv.querySelectorAll('pre').forEach((pre) => {
-
-                const codeBlock = pre.querySelector('code');
-
-                if (codeBlock) {
-
-                    hljs.highlightElement(codeBlock);
-
-                    
-
-                    // Kopier-Button hinzufügen
-
-                    const copyBtn = document.createElement('button');
-
-                    copyBtn.className = 'copy-code-btn';
-
-                    copyBtn.innerText = 'Kopieren';
-
-                    copyBtn.onclick = () => {
-
-                        const code = codeBlock.innerText;
-
-                        navigator.clipboard.writeText(code).then(() => {
-
-                            copyBtn.innerText = 'Kopiert!';
-
-                            copyBtn.classList.add('copied');
-
-                            setTimeout(() => {
-
-                                copyBtn.innerText = 'Kopieren';
-
-                                copyBtn.classList.remove('copied');
-
-                            }, 2000);
-
-                        });
-
-                    };
-
-                    pre.appendChild(copyBtn);
-
-                }
-
-            });
-
-        }
-
-        else { contentDiv.innerText = text; }
-
-        
-
-        msgDiv.appendChild(contentDiv);
+function appendMessage(text, className, isMarkdown = false, index = null, timestamp = null, onRetry = null) {
+    const msgDiv = document.createElement('div'); msgDiv.className = `message ${className}`; if (index !== null) msgDiv.dataset.index = index;
+    const contentDiv = document.createElement('div'); contentDiv.className = 'content-wrapper';
+    if (isMarkdown) { 
+        contentDiv.innerHTML = marked.parse(text); 
+        contentDiv.querySelectorAll('pre').forEach((pre) => {
+            const codeBlock = pre.querySelector('code');
+            if (codeBlock) {
+                hljs.highlightElement(codeBlock);
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'copy-code-btn';
+                copyBtn.innerText = 'Kopieren';
+                copyBtn.onclick = () => {
+                    const code = codeBlock.innerText;
+                    navigator.clipboard.writeText(code).then(() => {
+                        copyBtn.innerText = 'Kopiert!';
+                        copyBtn.classList.add('copied');
+                        setTimeout(() => { copyBtn.innerText = 'Kopieren'; copyBtn.classList.remove('copied'); }, 2000);
+                    });
+                };
+                pre.appendChild(copyBtn);
+            }
+        });
+    }
+    else { contentDiv.innerText = text; }
+    msgDiv.appendChild(contentDiv);
     if (timestamp) { const timeSpan = document.createElement('span'); timeSpan.className = 'message-time'; timeSpan.innerText = timestamp; msgDiv.appendChild(timeSpan); }
     if (onRetry) { const rb = document.createElement('button'); rb.className = 'retry-btn'; rb.innerText = 'Nochmal versuchen'; rb.onclick = onRetry; msgDiv.appendChild(rb); }
     if (className.includes('user-message')) { const eb = document.createElement('button'); eb.className = 'edit-btn'; eb.innerHTML = '✎'; eb.onclick = () => startEdit(msgDiv, text, index); msgDiv.appendChild(eb); }

@@ -102,6 +102,86 @@ h1 { margin: 0; font-size: 1.2rem; }
     margin: 0 auto;
     width: 100%;
     box-sizing: border-box;
+    position: relative;
+}
+
+#status-header {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    padding: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    /* pointer-events entfernt für Interaktivität */
+}
+
+.status-badge {
+    background: rgba(45, 45, 45, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: #aaa;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    animation: fadeIn 0.5s ease;
+    cursor: pointer; /* Klickbar */
+    transition: transform 0.2s, background 0.2s, border-color 0.2s;
+    pointer-events: auto;
+}
+
+.status-badge:hover {
+    transform: translateY(-2px);
+    background: rgba(60, 60, 60, 0.8);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.status-badge.master {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    background: rgba(74, 144, 226, 0.1);
+}
+
+.status-badge.agent {
+    border-color: #4caf50;
+    color: #4caf50;
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.status-badge .indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #888;
+}
+
+.status-badge.master .indicator {
+    background: var(--accent-color);
+    box-shadow: 0 0 8px var(--accent-color);
+    animation: pulse-blue 2s infinite;
+}
+
+.status-badge.agent .indicator {
+    background: #4caf50;
+    box-shadow: 0 0 8px #4caf50;
+    animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-blue {
+    0% { opacity: 0.4; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.1); box-shadow: 0 0 12px var(--accent-color); }
+    100% { opacity: 0.4; transform: scale(0.8); }
+}
+
+@keyframes pulse-green {
+    0% { opacity: 0.4; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.1); box-shadow: 0 0 12px #4caf50; }
+    100% { opacity: 0.4; transform: scale(0.8); }
 }
 
 .message {
@@ -216,8 +296,12 @@ textarea {
     border-radius: 6px; 
     padding: 10px; 
     font-family: inherit; 
-    resize: none; 
-    height: 50px; 
+    resize: vertical; /* Erlaubt manuelles Vergrößern der Höhe */
+    min-height: 50px; 
+    max-height: 200px; /* Begrenzt die Höhe, danach wird gescrollt */
+    overflow-y: auto; /* Aktiviert Scrollbar bei viel Text */
+    font-size: 12px; /* Um 4 Einheiten reduziert */
+    line-height: 1.4;
 }
 textarea:focus { outline: 2px solid var(--accent-color); }
 
@@ -256,7 +340,7 @@ a { color: var(--accent-color); }
     padding: 2rem;
     border-radius: 12px;
     border: 1px solid #444;
-    max-width: 400px;
+    max-width: 800px; /* Verdoppelt von 400px */
     width: 90%;
     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     animation: modalIn 0.2s ease-out;
@@ -272,6 +356,18 @@ a { color: var(--accent-color); }
     border-radius: 6px;
     margin: 15px 0;
     box-sizing: border-box;
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+textarea.modal-input {
+    min-height: 200px;
+    resize: vertical;
+    white-space: pre;
+    overflow-x: auto;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace; /* Hacker-Look für Markdown */
+    font-size: 0.85rem;
+    line-height: 1.5;
+    tab-size: 4;
 }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
 .modal-actions button { padding: 8px 20px; border-radius: 6px; cursor: pointer; border: none; font-weight: bold; }
