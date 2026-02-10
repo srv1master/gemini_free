@@ -1,7 +1,29 @@
-# Changelog - Gemini Free
+# Changelog - MyAI
 
 Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
+## [1.2.0] - 2026-02-10
+
+### 🕵️ Stealth & Anonymisierung
+- **Vollständiges Rebranding:** Der Name "Gemini" wurde aus der UI und den Server-Logs entfernt und durch "MyAI" ersetzt.
+- **Identitätsverschleierung:** Alle Status-Texte und Titel wurden neutralisiert, um das zugrunde liegende Modell zu verbergen.
+
+### 🧠 Intelligente Historie & Kontext
+- **Langzeitgedächtnis:** Implementierung einer persistenten `history.json` für dauerhafte Gesprächsverläufe.
+- **Synchronisierte Edits:** Beim Bearbeiten einer Nachricht wird die Historie auf dem Server und in der UI ab diesem Punkt abgeschnitten (Truncate), um logische Konsistenz zu wahren.
+- **Zeitbewusstsein:** Jede Nachricht erhält einen Zeitstempel, der in die API-Prompts injiziert wird. MyAI weiß nun, wann Informationen geteilt wurden.
+
+### ⚡ UI/UX & Feedback
+- **Präzisions-Timer:** Live-Stoppuhr im Format `HH:MM:SS.s` während der KI-Analyse.
+- **Interaktives Feedback:** Animierte blinkende Punkte (Ellipsis) signalisieren Aktivität.
+- **Benutzerfreundliches Error-Handling:** Technische 429-Fehler werden durch eine rote Warnmeldung ("Ich bin gerade überlastet") mit einem direkten "Nochmal versuchen"-Button ersetzt.
+
+### ⚙️ Architektur & Portabilität
+- **Dynamische Konfiguration:** Einführung der `config.json` für alle einstellbaren Parameter (Port, Modell, Retries, Texte).
+- **Vollständige Portabilität:** Umstellung auf absolut relative Pfade (`path.join(__dirname, ...)`), damit das Projekt in jedem Verzeichnis sofort lauffähig ist.
+- **Verbesserter Retry-Mechanismus:** Upgrade auf Exponential Backoff (bis zu 5 Versuche) bei Serverlast.
+
+---
 ## [1.1.0] - 2026-02-10
 
 ### ✨ Neue Funktionen

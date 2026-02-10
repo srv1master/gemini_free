@@ -1,22 +1,22 @@
-# Gemini Free - Inoffizielle Gemini API & WebUI
+# MyAI - Private Intelligence API & WebUI
 
-Dieses Projekt ermöglicht die Nutzung des `gemini-3-flash-preview` Modells über die interne Google Cloud Code API, ohne offizielle SDKs oder direkte API-Abrechnung. Es beinhaltet ein CLI-Tool und eine moderne Web-Benutzeroberfläche.
+Dieses Projekt bietet eine leistungsstarke, inoffizielle Schnittstelle zu modernsten Sprachmodellen über eine hochgradig optimierte Web-Oberfläche und CLI. Es wurde für maximale Privatsphäre, Portabilität und Benutzerfreundlichkeit entwickelt.
 
-## 🚀 Features
-- **Direkter API-Zugriff:** Nutzt interne Google Cloud Code Endpunkte.
-- **Web-Interface:** Schicker Chat-Modus mit Markdown-Support und Syntax-Highlighting.
-- **NEU: Nachrichten bearbeiten:** Korrigiere deine Prompts direkt in der UI und sende sie erneut.
-- **NEU: Auto-Token-Refresh:** Nie wieder manuell einloggen – der Server erneuert Tokens automatisch.
-- **NEU: 429-Retry-Logik:** Automatisches Warten und Wiederholen bei überlasteten Google-Servern.
-- **CLI-Tool:** Schnelle Prompts direkt aus dem Terminal.
-- **Kostenlos:** Verwendet die für IDE-Erweiterungen vorgesehenen Kontingente.
+## 🚀 Key Features
+- **🕵️ Stealth Mode:** Vollständige Anonymisierung des zugrunde liegenden Modells und Anbieters.
+- **🧠 Kontext-Gedächtnis:** Persistente Historie für Langzeit-Gespräche.
+- **⌛ Zeitbewusstsein:** Automatisches Tracking und Injektion von Zeitstempeln für zeitbasierte Abfragen.
+- **🔄 Sync-Edits:** Bearbeite Nachrichten rückwirkend mit automatischer Historien-Bereinigung.
+- **⚡ Performance-UI:** Animierte Ladeanzeige mit Präzisions-Timer (HH:MM:SS.s).
+- **🛡️ Resilience:** Automatischer Token-Refresh und Exponential Backoff bei API-Limits.
+- **📦 Portabilität:** Vollständig relative Pfade, bereit für den Einsatz auf jedem System.
 
 ## 📁 Projektstruktur
-- `standalone.js`: Führt den Google OAuth2 Login durch.
-- `server.js`: Das Backend für die Web-Anwendung (Port 3000).
-- `index.html`: Das Frontend der Web-UI.
-- `gemini-direct.js`: Das CLI-Tool für Terminal-Anfragen.
-- `installation_id`: Enthält die für die API erforderliche Hardware-ID.
+- `server.js`: Das Backend mit dynamischer Konfiguration und API-Proxy.
+- `index.html`: Das moderne Frontend für das MyAI Control Panel.
+- `config.json`: Zentrale Steuerung aller Parameter (Port, Modell, Texte).
+- `standalone.js`: Tool für die initiale OAuth2-Authentifizierung.
+- `secrets.json`: (Lokal) Sicherer Speicher für API-Credentials.
 
 ## 🛠 Installation & Setup
 
@@ -26,37 +26,20 @@ Dieses Projekt ermöglicht die Nutzung des `gemini-3-flash-preview` Modells übe
    cd gemini_free
    ```
 
-2. **Abhängigkeiten:**
-   Stelle sicher, dass Node.js (v18+) installiert ist. Es werden keine externen npm-Pakete benötigt (native `fetch` Nutzung).
+2. **Voraussetzungen:**
+   Node.js (v18+) ist erforderlich. Keine npm-Abhängigkeiten notwendig.
 
 3. **Konfiguration:**
-   Öffne `standalone.js` und trage deine `CLIENT_ID` und dein `CLIENT_SECRET` ein (aus der Google Cloud Console oder extrahiert aus Cloud Code).
+   Trage deine Credentials in `secrets.json` ein (siehe `standalone.js` für das Setup).
 
-4. **Login:**
+4. **Starten:**
    ```bash
-   node standalone.js
+   node server.js
    ```
-   Dies öffnet den Browser. Nach dem Login werden `oauth_creds.json` und `account.json` erstellt.
+   Öffne danach **http://localhost:3000** im Browser.
 
-## 🖥 Nutzung
-
-### Web-Interface (Empfohlen)
-Starte den Server:
-```bash
-node server.js
-```
-Öffne danach **http://localhost:3000** in deinem Browser.
-
-### CLI
-Sende eine direkte Frage:
-```bash
-node gemini-direct.js "Wie funktioniert Quantencomputer?"
-```
-
-## ⚠️ Wichtige Hinweise
-- Dieses Projekt ist zu experimentellen Zwecken gedacht (Reverse Engineering).
-- Die internen Endpunkte können sich jederzeit ändern.
-- Halte deine `oauth_creds.json` privat!
+## ⚙️ Anpassung
+Alle UI-Texte, Port-Einstellungen und Modell-Parameter können bequem in der `config.json` angepasst werden.
 
 ## 📄 Lizenz
 MIT

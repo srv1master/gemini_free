@@ -1,0 +1,11 @@
+{
+  "PORT": 3000,
+  "MODEL_NAME": "gemini-3-flash-preview",
+  "MAX_RETRIES": 5,
+  "HISTORY_LIMIT": 40,
+  "RETRY_DELAY_MS": 1000,
+  "TIMEZONE": "Europe/Berlin",
+  "LOCALE": "de-DE",
+  "APP_NAME": "MyAI Control Panel",
+  "LOADING_TEXT": "KI analysiert"
+}

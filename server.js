@@ -7,6 +7,22 @@ const SCRIPT_DIR = __dirname;
 const CREDS_FILE = path.join(SCRIPT_DIR, 'oauth_creds.json');
 const INSTALL_ID_FILE = path.join(SCRIPT_DIR, 'installation_id');
 const SECRETS_FILE = path.join(SCRIPT_DIR, 'secrets.json');
+const HISTORY_FILE = path.join(SCRIPT_DIR, 'history.json');
+const CONFIG_FILE = path.join(SCRIPT_DIR, 'config.json');
+
+// Konfiguration laden
+const config = fs.existsSync(CONFIG_FILE)
+    ? JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))
+    : { 
+        PORT: 3000, 
+        MODEL_NAME: "gemini-3-flash-preview", 
+        MAX_RETRIES: 5, 
+        HISTORY_LIMIT: 40,
+        RETRY_DELAY_MS: 1000,
+        TIMEZONE: "Europe/Berlin",
+        LOCALE: "de-DE",
+        APP_NAME: "MyAI Control Panel"
+      };
 
 // OAuth Konfiguration laden
 const secrets = fs.existsSync(SECRETS_FILE) 
@@ -17,6 +33,18 @@ const CLIENT_ID = secrets.CLIENT_ID;
 const CLIENT_SECRET = secrets.CLIENT_SECRET;
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Historie laden/speichern
+function loadHistory() {
+    if (fs.existsSync(HISTORY_FILE)) {
+        try { return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8')); } catch (e) { return []; }
+    }
+    return [];
+}
+
+function saveHistory(history) {
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+}
 
 async function refreshAccessToken() {
     console.log('Versuche Access Token zu erneuern...');
@@ -65,7 +93,7 @@ const serveFile = (res, filePath, contentType) => {
 
 // Helper: Logik aus gemini-direct.js
 async function askGemini(userPrompt, retryCount = 0) {
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = config.MAX_RETRIES;
     if (!fs.existsSync(CREDS_FILE)) {
         throw new Error('Credentials (oauth_creds.json) nicht gefunden. Bitte zuerst login ausführen.');
     }
@@ -76,6 +104,27 @@ async function askGemini(userPrompt, retryCount = 0) {
     let creds = JSON.parse(fs.readFileSync(CREDS_FILE, 'utf8'));
     const installId = fs.readFileSync(INSTALL_ID_FILE, 'utf8').replace(/[\r\n]/g, '').trim();
     let accessToken = creds.access_token;
+
+    // Historie laden
+    let history = loadHistory();
+    const now = new Date().toLocaleString(config.LOCALE, { timeZone: config.TIMEZONE });
+    
+    // Aktuelle Nachricht mit Zeitstempel erstellen
+    const currentMessage = { 
+        role: "user", 
+        parts: [{ text: userPrompt }],
+        timestamp: now 
+    };
+    
+    // Anfrage-Array für Gemini aufbauen (Zeitstempel in den Text injizieren)
+    const contents = history.map(msg => ({
+        role: msg.role,
+        parts: [{ text: `[Zeitstempel: ${msg.timestamp}] ${msg.parts[0].text}` }]
+    }));
+    contents.push({
+        role: "user",
+        parts: [{ text: `[Zeitstempel: ${now}] ${userPrompt}` }]
+    });
 
     const getHeaders = (token) => ({
         'Authorization': `Bearer ${token}`,
@@ -101,8 +150,9 @@ async function askGemini(userPrompt, retryCount = 0) {
         }
 
         if (loadResp.status === 429 && retryCount < MAX_RETRIES) {
-            console.log(`API Limit (429) bei Init. Warte 3s... (${retryCount + 1}/${MAX_RETRIES})`);
-            await sleep(3000);
+            const waitTime = Math.pow(2, retryCount) * config.RETRY_DELAY_MS + Math.random() * 1000;
+            console.log(`API Limit (429) bei Init. Warte ${Math.round(waitTime/1000)}s... (${retryCount + 1}/${MAX_RETRIES})`);
+            await sleep(waitTime);
             return askGemini(userPrompt, retryCount + 1);
         }
 
@@ -118,17 +168,18 @@ async function askGemini(userPrompt, retryCount = 0) {
             method: 'POST',
             headers: getHeaders(accessToken),
             body: JSON.stringify({
-                model: "gemini-3-flash-preview", 
+                model: config.MODEL_NAME, 
                 project: projectId,
                 request: {
-                    contents: [{ role: "user", parts: [{ text: userPrompt }] }]
+                    contents: contents
                 }
             })
         });
 
         if (genResp.status === 429 && retryCount < MAX_RETRIES) {
-            console.log(`API Limit (429) bei Generierung. Warte 3s... (${retryCount + 1}/${MAX_RETRIES})`);
-            await sleep(3000);
+            const waitTime = Math.pow(2, retryCount) * config.RETRY_DELAY_MS + Math.random() * 1000;
+            console.log(`API Limit (429) bei Generierung. Warte ${Math.round(waitTime/1000)}s... (${retryCount + 1}/${MAX_RETRIES})`);
+            await sleep(waitTime);
             return askGemini(userPrompt, retryCount + 1);
         }
 
@@ -139,7 +190,21 @@ async function askGemini(userPrompt, retryCount = 0) {
 
         const genData = await genResp.json();
         if (genData.response && genData.response.candidates) {
-            return genData.response.candidates[0].content.parts[0].text;
+            const botText = genData.response.candidates[0].content.parts[0].text;
+            const botNow = new Date().toLocaleString(config.LOCALE, { timeZone: config.TIMEZONE });
+            
+            // Historie aktualisieren und speichern
+            history.push(currentMessage);
+            history.push({ 
+                role: "model", 
+                parts: [{ text: botText }],
+                timestamp: botNow
+            });
+            
+            if (history.length > config.HISTORY_LIMIT) history = history.slice(-config.HISTORY_LIMIT);
+            saveHistory(history);
+            
+            return { text: botText, timestamp: botNow, userTimestamp: now };
         } else {
             throw new Error("Unerwartete Antwortstruktur von der API");
         }
@@ -149,8 +214,9 @@ async function askGemini(userPrompt, retryCount = 0) {
             return askGemini(userPrompt, retryCount + 1);
         }
         if (err.message.includes('429') && retryCount < MAX_RETRIES) {
-            console.log(`Limit (429) erkannt. Warte 3s...`);
-            await sleep(3000);
+            const waitTime = Math.pow(2, retryCount) * config.RETRY_DELAY_MS + Math.random() * 1000;
+            console.log(`Limit (429) erkannt. Warte ${Math.round(waitTime/1000)}s...`);
+            await sleep(waitTime);
             return askGemini(userPrompt, retryCount + 1);
         }
         throw err;
@@ -175,25 +241,65 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Route: GET /api/history -> Historie abrufen
+    if (req.method === 'GET' && req.url === '/api/history') {
+        const history = loadHistory();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ history }));
+        return;
+    }
+
+    // Route: GET /api/config -> Konfiguration abrufen
+    if (req.method === 'GET' && req.url === '/api/config') {
+        const publicConfig = {
+            APP_NAME: config.APP_NAME,
+            LOADING_TEXT: config.LOADING_TEXT
+        };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(publicConfig));
+        return;
+    }
+
+    // Route: POST /api/clear -> Historie löschen
+    if (req.method === 'POST' && req.url === '/api/clear') {
+        saveHistory([]);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+        return;
+    }
+
     // Route: POST /api/chat -> Gemini Anfrage
     if (req.method === 'POST' && req.url === '/api/chat') {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', async () => {
             try {
-                const { prompt } = JSON.parse(body);
+                const { prompt, index } = JSON.parse(body);
                 if (!prompt) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ error: "Kein Prompt angegeben" }));
                     return;
                 }
 
+                // Falls ein Index übergeben wurde (Edit-Modus), Historie SOFORT kürzen
+                if (typeof index === 'number') {
+                    let history = loadHistory();
+                    if (index >= 0 && index < history.length) {
+                        console.log(`[EDIT] Kürze Historie: Entferne alles ab Index ${index} (Alt: ${history.length} Einträge)`);
+                        history = history.slice(0, index);
+                        saveHistory(history);
+                        console.log(`[EDIT] Neue Historien-Größe: ${history.length}`);
+                    }
+                }
+
+                // WICHTIG: askGemini liest loadHistory() intern. 
+                // Da wir saveHistory() oben gerufen haben, liest es die gekürzte Version.
                 const answer = await askGemini(prompt);
                 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ answer }));
             } catch (err) {
-                console.error(err);
+                console.error("[API ERROR]", err);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: err.message }));
             }
@@ -206,8 +312,9 @@ const server = http.createServer(async (req, res) => {
     res.end('Nicht gefunden');
 });
 
-server.listen(PORT, () => {
+server.listen(config.PORT, () => {
     console.log(`
-🚀 Gemini WebUI läuft auf: http://localhost:${PORT}`);
+🚀 ${config.APP_NAME} läuft auf: http://localhost:${config.PORT}`);
     console.log(`Drücke Strg+C zum Beenden.`);
 });
+

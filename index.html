@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini Direct WebUI</title>
+    <title>MyAI - Private Intelligence</title>
     <!-- Marked für Markdown Parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- Highlight.js für Code Syntax Highlighting -->
@@ -122,6 +122,18 @@
             background-color: #555;
         }
 
+        .message-time {
+            display: block;
+            font-size: 0.7rem;
+            color: #888;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .bot-message .message-time {
+            text-align: left;
+        }
+
         .bot-message {
             background-color: var(--chat-bg);
             align-self: flex-start;
@@ -178,7 +190,50 @@
         button:hover { filter: brightness(1.1); }
         button:disabled { background-color: #555; cursor: not-allowed; }
 
-        .loading { color: #888; font-style: italic; font-size: 0.9rem; }
+        .loading { color: #888; font-style: italic; font-size: 0.9rem; display: flex; align-items: center; gap: 5px; }
+        
+        /* Blinkende Punkte Animation */
+        .dots span {
+            animation: blink 1.4s infinite both;
+            font-style: normal;
+            font-weight: bold;
+        }
+        .dots span:nth-child(2) { animation-delay: 0.2s; }
+        .dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes blink {
+            0% { opacity: 0.2; }
+            20% { opacity: 1; }
+            100% { opacity: 0.2; }
+        }
+
+        .timer {
+            font-family: monospace;
+            color: var(--accent-color);
+            margin-left: 10px;
+            font-style: normal;
+        }
+
+        .error-message {
+            border: 1px solid var(--error-color) !important;
+            color: var(--error-color) !important;
+            background-color: rgba(229, 115, 115, 0.05) !important;
+        }
+
+        .retry-btn {
+            background-color: var(--error-color) !important;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            display: block;
+            transition: transform 0.1s;
+        }
+        
+        .retry-btn:active { transform: scale(0.95); }
         
         /* Markdown Styles */
         code { font-family: 'Consolas', monospace; background: #333; padding: 2px 4px; border-radius: 3px; }
@@ -191,18 +246,19 @@
 <body>
 
 <header>
-    <h1>Gemini Direct WebUI</h1>
+    <h1>MyAI Control Panel</h1>
+    <button onclick="clearChat()" style="position: absolute; right: 20px; top: 15px; background: var(--error-color); font-size: 0.8rem; padding: 5px 10px;">Verlauf löschen</button>
 </header>
 
 <div id="chat-container">
     <div class="message bot-message">
-        Hallo! Ich bin bereit. Frage mich etwas über dein Projekt oder Code.
+        System bereit. Woran arbeiten wir heute?
     </div>
 </div>
 
 <div class="input-area">
     <div class="input-wrapper">
-        <textarea id="promptInput" placeholder="Deine Nachricht an Gemini... (Shift+Enter für neue Zeile)"></textarea>
+        <textarea id="promptInput" placeholder="Eingabe an MyAI... (Shift+Enter für neue Zeile)"></textarea>
         <button id="sendBtn" onclick="sendMessage()">Senden</button>
     </div>
 </div>
@@ -212,6 +268,57 @@
     const input = document.getElementById('promptInput');
     const sendBtn = document.getElementById('sendBtn');
 
+    let APP_NAME = "MyAI";
+    let LOADING_TEXT = "KI analysiert";
+
+    // Beim Laden: Konfiguration und Historie abrufen
+    window.onload = async () => {
+        await applyConfig();
+        await loadChatHistory();
+    };
+
+    async function applyConfig() {
+        try {
+            const response = await fetch('/api/config');
+            const config = await response.json();
+            if (config.APP_NAME) {
+                APP_NAME = config.APP_NAME;
+                document.title = APP_NAME + " - Private Intelligence";
+                document.querySelector('header h1').innerText = APP_NAME;
+                input.placeholder = `Eingabe an ${APP_NAME}... (Shift+Enter für neue Zeile)`;
+            }
+            if (config.LOADING_TEXT) LOADING_TEXT = config.LOADING_TEXT;
+        } catch (err) {
+            console.error('Fehler beim Laden der Konfiguration:', err);
+        }
+    }
+
+    async function loadChatHistory() {
+        try {
+            const response = await fetch('/api/history');
+            const data = await response.json();
+            if (data.history && data.history.length > 0) {
+                chatContainer.innerHTML = '';
+                data.history.forEach((msg, index) => {
+                    const className = msg.role === 'user' ? 'user-message' : 'bot-message';
+                    appendMessage(msg.parts[0].text, className, msg.role === 'model', index, msg.timestamp);
+                });
+            }
+        } catch (err) {
+            console.error('Fehler beim Laden der Historie:', err);
+        }
+    }
+
+    async function clearChat() {
+        if (!confirm('Gesamten Chatverlauf löschen?')) return;
+        try {
+            await fetch('/api/clear', { method: 'POST' });
+            chatContainer.innerHTML = `<div class="message bot-message">System-Log bereinigt. Neue Session gestartet.</div>`;
+        } catch (err) {
+            alert('Fehler beim Löschen: ' + err.message);
+        }
+    }
+
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -219,12 +326,23 @@
         }
     });
 
-    async function sendMessage(textOverride = null) {
+    async function sendMessage(textOverride = null, indexToTruncate = null) {
         const text = textOverride || input.value.trim();
         if (!text) return;
 
-        if (!textOverride) {
-            appendMessage(text, 'user-message');
+        const now = new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
+
+        if (indexToTruncate !== null) {
+            const messages = Array.from(chatContainer.querySelectorAll('.message'));
+            messages.forEach(m => {
+                if (parseInt(m.dataset.index) >= indexToTruncate) {
+                    m.remove();
+                }
+            });
+            appendMessage(text, 'user-message', false, indexToTruncate, now);
+        } else if (!textOverride) {
+            const nextIndex = chatContainer.querySelectorAll('.message').length;
+            appendMessage(text, 'user-message', false, nextIndex, now);
             input.value = '';
         }
         
@@ -235,28 +353,60 @@
         const loadingDiv = document.createElement('div');
         loadingDiv.id = loadingId;
         loadingDiv.className = 'message bot-message loading';
-        loadingDiv.innerText = 'Gemini denkt nach...';
+        loadingDiv.innerHTML = `${LOADING_TEXT}<span class="dots"><span>.</span><span>.</span><span>.</span></span> <span class="timer" id="timer-${loadingId}">00:00:00.0</span>`;
         chatContainer.appendChild(loadingDiv);
         scrollToBottom();
 
+        // Timer starten
+        let seconds = 0;
+        const timerElement = document.getElementById(`timer-${loadingId}`);
+        const timerInterval = setInterval(() => {
+            seconds += 0.1;
+            
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            
+            const displayTime = 
+                h.toString().padStart(2, '0') + ':' + 
+                m.toString().padStart(2, '0') + ':' + 
+                s.toFixed(1).padStart(4, '0');
+            
+            timerElement.innerText = displayTime;
+        }, 100);
+
         try {
+            const payload = { prompt: text };
+            if (indexToTruncate !== null) payload.index = indexToTruncate;
+
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: text })
+                body: JSON.stringify(payload)
             });
 
             const data = await response.json();
+            clearInterval(timerInterval); // Timer stoppen
             document.getElementById(loadingId).remove();
 
             if (data.error) {
-                appendMessage(`❌ Fehler: ${data.error}`, 'bot-message', false);
+                const isOverloaded = data.error.includes("429") || data.error.includes("RESOURCE_EXHAUSTED");
+                const errorText = isOverloaded ? "Ich bin gerade überlastet." : `❌ Fehler: ${data.error}`;
+                appendMessage(errorText, 'bot-message error-message', false, null, null, isOverloaded ? () => {
+                    const messages = Array.from(chatContainer.querySelectorAll('.message'));
+                    const lastMsg = messages[messages.length - 1];
+                    if (lastMsg) lastMsg.remove(); // Entferne Fehlernachricht
+                    sendMessage(text, indexToTruncate);
+                } : null);
             } else {
-                appendMessage(data.answer, 'bot-message', true);
+                const nextBotIndex = chatContainer.querySelectorAll('.message').length;
+                // 'data.answer' ist jetzt ein Objekt mit {text, timestamp}
+                appendMessage(data.answer.text, 'bot-message', true, nextBotIndex, data.answer.timestamp);
             }
         } catch (err) {
+            clearInterval(timerInterval); // Timer stoppen
             if (document.getElementById(loadingId)) document.getElementById(loadingId).remove();
-            appendMessage(`❌ Netzwerkfehler: ${err.message}`, 'bot-message', false);
+            appendMessage(`❌ Netzwerkfehler: ${err.message}`, 'bot-message error-message', false);
         } finally {
             input.disabled = false;
             sendBtn.disabled = false;
@@ -264,9 +414,10 @@
         }
     }
 
-    function appendMessage(text, className, isMarkdown = false) {
+    function appendMessage(text, className, isMarkdown = false, index = null, timestamp = null, onRetry = null) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${className}`;
+        if (index !== null) msgDiv.dataset.index = index;
         
         const contentDiv = document.createElement('div');
         contentDiv.className = 'content-wrapper';
@@ -282,12 +433,27 @@
         
         msgDiv.appendChild(contentDiv);
 
-        if (className === 'user-message') {
+        if (timestamp) {
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'message-time';
+            timeSpan.innerText = timestamp;
+            msgDiv.appendChild(timeSpan);
+        }
+
+        if (onRetry) {
+            const retryBtn = document.createElement('button');
+            retryBtn.className = 'retry-btn';
+            retryBtn.innerText = 'Nochmal versuchen';
+            retryBtn.onclick = onRetry;
+            msgDiv.appendChild(retryBtn);
+        }
+
+        if (className.includes('user-message')) {
             const editBtn = document.createElement('button');
             editBtn.className = 'edit-btn';
             editBtn.innerHTML = '✎';
             editBtn.title = 'Nachricht bearbeiten';
-            editBtn.onclick = () => startEdit(msgDiv, text);
+            editBtn.onclick = () => startEdit(msgDiv, text, index);
             msgDiv.appendChild(editBtn);
         }
         
@@ -295,7 +461,7 @@
         scrollToBottom();
     }
 
-    function startEdit(msgDiv, originalText) {
+    function startEdit(msgDiv, originalText, index) {
         const contentWrapper = msgDiv.querySelector('.content-wrapper');
         const editBtn = msgDiv.querySelector('.edit-btn');
         
@@ -328,14 +494,8 @@
             const newText = textarea.value.trim();
             if (newText && newText !== originalText) {
                 editContainer.remove();
-                // Update den Text in der UI
-                contentWrapper.innerText = newText;
-                contentWrapper.style.display = 'block';
-                editBtn.style.display = '';
-                // Setze onclick neu für den nächsten Edit
-                editBtn.onclick = () => startEdit(msgDiv, newText);
-                // Erneut senden
-                sendMessage(newText);
+                // Sende mit Index zum Kürzen der Historie
+                sendMessage(newText, index);
             } else {
                 cancelBtn.onclick();
             }
