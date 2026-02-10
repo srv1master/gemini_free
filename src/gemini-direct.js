@@ -10,8 +10,9 @@ async function run() {
     }
 
     const scriptDir = __dirname;
-    const credsField = path.join(scriptDir, 'oauth_creds.json');
-    const installIdFile = path.join(scriptDir, 'installation_id');
+    const dataDir = path.join(scriptDir, 'data');
+    const credsField = path.join(dataDir, 'oauth_creds.json');
+    const installIdFile = path.join(dataDir, 'installation_id');
     
     try {
         if (!fs.existsSync(credsField)) {

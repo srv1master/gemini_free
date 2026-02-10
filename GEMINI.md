@@ -1,50 +1,43 @@
 # MyAI - Private Intelligence Project Context
 
 ## 🚀 Project Overview
-Dieses Projekt, ehemals bekannt als `gemini_free`, ist eine hochgradig optimierte, inoffizielle Implementierung zur Interaktion mit der Google Cloud Code API (`v1internal`). Es wurde zu einem professionellen, anonymisierten **MyAI-System** weiterentwickelt, das sowohl eine CLI als auch eine moderne Web-Benutzeroberfläche mit Multi-Chat-Unterstützung bietet. Fokus liegt auf Privatsphäre, kontextueller Intelligenz und absoluter Portabilität.
+Dieses Projekt ist eine hochgradig optimierte, anonymisierte Implementierung zur Interaktion mit der Google Cloud Code API. Die Architektur ist modular, portabel und für maximale Privatsphäre ausgelegt.
 
 ### Core Technologies
 - **Runtime:** Node.js (v18+)
-- **API:** Google Cloud Code Internal API (`cloudcode-pa.googleapis.com`)
-- **UI:** Modern HTML5/CSS3/JS mit Markdown (marked.js) & Highlight.js
-- **Architecture:** Portable Node.js Server mit dynamischer Konfiguration und Multi-Session-Management.
+- **API:** Google Cloud Code Internal API
+- **UI:** Modern HTML5/CSS3/JS (Custom Modals, Sidebar, Multi-Chat)
 
-## 📁 Key Files & Structure
-- **`server.js`**: Das Herzstück. Ein portabler Proxy-Server, der OAuth-Refresh, Historien-Management (Multi-Session) und API-Interaktion steuert.
-- **`index.html`**: Das MyAI Control Panel. Bietet eine Chat-UI mit Sidebar, Echtzeit-Feedback, Edit-Funktionen und Zeitstempeln.
-- **`chats/`**: Verzeichnis für alle Konversationen. Jeder Chat hat einen eigenen Unterordner mit einer `history.json`.
-- **`config.json`**: Zentrale Konfiguration (Port, Modell, Retries, UI-Texte).
-- **`secrets.json`**: Sicherer lokaler Speicher für API-Credentials (automatisch in `.gitignore`).
-- **`standalone.js`**: Tool für die initiale OAuth2-Authentifizierung.
-- **`installation_id`**: Eindeutige Hardware-ID für die API-Authentifizierung.
+## 📁 Optimized Structure (v1.5.0)
+- **`/src`**: Enthält die Programmlogik.
+  - `server.js`: Der portable Proxy-Server.
+  - `standalone.js`: OAuth2-Authentifizierungs-Tool.
+  - `gemini-direct.js`: CLI-Schnittstelle.
+- **`/public`**: Enthält die Frontend-Dateien.
+  - `index.html`: Das MyAI Control Panel.
+- **`/data`**: Zentraler Speicher für Konfiguration und Benutzerdaten.
+  - `chats/`: Unterverzeichnisse für jede Chat-Session.
+  - `config.json`: Dynamische UI- und Server-Einstellungen.
+  - `secrets.json`: API-Credentials.
+  - `oauth_creds.json` / `account.json`: Authentifizierungsdaten.
+  - `installation_id`: API-Hardware-ID.
 
 ## 🛠 Features & Logic
+... (bestehende Funktionen: Stealth, Historie, Zeitstempel, Resilienz) ...
 
-### 1. Multi-Chat & Session Management (v1.3.0)
-Das System unterstützt nun unbegrenzte parallele Konversationen. Über eine Sidebar in der Web-UI können neue Chats erstellt und bestehende geladen werden. Jeder Chat agiert isoliert in seinem eigenen Dateisystem-Kontext (`chats/CHAT_ID/history.json`).
-
-### 2. Stealth & Anonymisierung
-Vollständiges Rebranding auf "MyAI". Alle Hinweise auf den Anbieter (Google/Gemini) wurden aus der UI und den Logs entfernt, um das genutzte Modell zu verschleiern. Dynamische UI-Texte werden über den `/api/config` Endpunkt geladen.
-
-### 3. Intelligente Historie & Kontext
-- **Synchronisierte Edits:** Beim Bearbeiten einer Nachricht wird die Historie auf dem Server und in der UI ab diesem Punkt abgeschnitten (Truncate), um logische Konsistenz zu wahren.
-- **Zeitbewusstsein:** Nachrichten erhalten Timestamps, die in die API-Prompts injiziert werden (`[Zeitstempel: ...]`), damit die KI zeitliche Bezüge versteht.
-
-### 5. Präzisions-UI & Interaktion (v1.4.0)
-- **Live-Stoppuhr:** Echtzeit-Anzeige der Verarbeitungsdauer im Format `HH:MM:SS.s`.
-- **MyAI Modals:** Ein integriertes System für Dialoge und Eingabeaufforderungen, das native Browser-Fenster ersetzt und für Design-Konsistenz sorgt.
-- **Dynamische Sidebar:** Vollständig verzeichnisbasierte Anzeige aller Sessions im `chats/` Ordner.
+## 📦 Portabilität & Deployment
+Die Architektur nutzt rein relative Pfade basierend auf den Modulstandorten in `/src`. Das gesamte Projektverzeichnis kann verschoben werden, solange die interne Struktur gewahrt bleibt.
 
 ## 🛠 Usage
 
-### 1. Authentifizierung (einmalig)
+### 1. Authentifizierung
 ```bash
-node standalone.js
+node src/standalone.js
 ```
 
 ### 2. MyAI starten
 ```bash
-node server.js
+node src/server.js
 ```
 Zugriff über **http://localhost:3000**.
 

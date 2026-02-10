@@ -52,15 +52,18 @@ async function main() {
                 console.log('Code erhalten, tausche gegen Tokens aus...');
                 
                 const tokenResponse = await fetchTokens(queryObject.code);
-                fs.writeFileSync('oauth_creds.json', JSON.stringify(tokenResponse, null, 2));
+                const dataDir = path.join(__dirname, 'data');
+                if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+
+                fs.writeFileSync(path.join(dataDir, 'oauth_creds.json'), JSON.stringify(tokenResponse, null, 2));
                 
                 console.log('Rufe Benutzerinformationen ab...');
                 const userInfo = await fetchUserInfo(tokenResponse.access_token);
-                fs.writeFileSync('account.json', JSON.stringify(userInfo, null, 2));
+                fs.writeFileSync(path.join(dataDir, 'account.json'), JSON.stringify(userInfo, null, 2));
                 
                 res.end(`Login erfolgreich als ${userInfo.email}! Du kannst dieses Fenster nun schliessen.`);
                 console.log(`Erfolg! Angemeldet als: ${userInfo.email}`);
-                console.log('oauth_creds.json und account.json wurden erstellt/aktualisiert.');
+                console.log('data/oauth_creds.json und data/account.json wurden erstellt/aktualisiert.');
                 server.close();
                 process.exit(0);
             }

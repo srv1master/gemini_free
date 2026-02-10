@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyAI - Private Intelligence</title>
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Marked für Markdown Parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Highlight.js für Code Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="sidebar-header">
+        <span style="font-weight: bold;">Meine Chats</span>
+    </div>
+    <div style="padding: 10px;">
+        <button class="new-chat-btn" onclick="createNewChat()">+ Neuer Chat</button>
+    </div>
+    <div id="chat-list">
+        <!-- Chats werden hier geladen -->
+    </div>
+</div>
+
+<div id="main-content">
+    <header>
+        <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+        <h1 id="appTitle">MyAI Control Panel</h1>
+        <button onclick="clearChat()" style="position: absolute; right: 20px; top: 15px; background: var(--error-color); font-size: 0.8rem; padding: 5px 10px; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">Verlauf löschen</button>
+    </header>
+
+    <div id="chat-container">
+        <!-- Nachrichten hier -->
+    </div>
+
+    <footer class="input-area">
+        <div class="input-wrapper">
+            <textarea id="promptInput" placeholder="Eingabe an MyAI... (Shift+Enter für neue Zeile)"></textarea>
+            <button id="sendBtn" onclick="sendMessage()">Senden</button>
+        </div>
+    </footer>
+</div>
+
+<!-- MyAI Modal -->
+<div id="modal-overlay">
+    <div class="modal-box">
+        <h3 id="modal-title">Titel</h3>
+        <p id="modal-message">Nachricht</p>
+        <input type="text" id="modal-input" class="modal-input" style="display:none;">
+        <div class="modal-actions">
+            <button id="modal-cancel-btn" class="modal-cancel">Abbrechen</button>
+            <button id="modal-confirm-btn" class="modal-confirm">Bestätigen</button>
+        </div>
+    </div>
+</div>
+
+<!-- Script -->
+<script src="script.js"></script>
+
+</body>
+</html>

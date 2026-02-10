@@ -4,14 +4,19 @@ const path = require('path');
 
 const PORT = 3000;
 const SCRIPT_DIR = __dirname;
-const CREDS_FILE = path.join(SCRIPT_DIR, 'oauth_creds.json');
-const INSTALL_ID_FILE = path.join(SCRIPT_DIR, 'installation_id');
-const SECRETS_FILE = path.join(SCRIPT_DIR, 'secrets.json');
-const HISTORY_FILE = path.join(SCRIPT_DIR, 'history.json');
-const CONFIG_FILE = path.join(SCRIPT_DIR, 'config.json');
-const CHATS_DIR = path.join(SCRIPT_DIR, 'chats');
+const ROOT_DIR = path.join(SCRIPT_DIR, '..');
+const DATA_DIR = path.join(ROOT_DIR, 'data');
+const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 
-// Sicherstellen, dass Chats-Verzeichnis existiert
+const CREDS_FILE = path.join(DATA_DIR, 'oauth_creds.json');
+const INSTALL_ID_FILE = path.join(DATA_DIR, 'installation_id');
+const SECRETS_FILE = path.join(DATA_DIR, 'secrets.json');
+const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
+const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const CHATS_DIR = path.join(DATA_DIR, 'chats');
+
+// Sicherstellen, dass Verzeichnisse existieren
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 if (!fs.existsSync(CHATS_DIR)) fs.mkdirSync(CHATS_DIR);
 
 // Konfiguration laden
@@ -100,7 +105,7 @@ async function refreshAccessToken() {
     }
 }
 
-// Helper: Serviert statische Dateien (HTML)
+// Helper: Serviert statische Dateien
 const serveFile = (res, filePath, contentType) => {
     fs.readFile(filePath, (err, content) => {
         if (err) {
@@ -246,7 +251,7 @@ async function askGeminiExtended(userPrompt, chatId = "default", retryCount = 0)
 }
 
 const server = http.createServer(async (req, res) => {
-    // CORS Header für alle Fälle
+    // CORS Header
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -257,13 +262,9 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Route: GET / -> Zeige UI
-    if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
-        serveFile(res, path.join(SCRIPT_DIR, 'index.html'), 'text/html');
-        return;
-    }
-
-    // Route: GET /api/history -> Historie abrufen
+    // API ENDPUNKTE
+    
+    // GET /api/history -> Historie abrufen
     if (req.method === 'GET' && req.url.startsWith('/api/history')) {
         const urlObj = new URL(req.url, `http://${req.headers.host}`);
         const chatId = urlObj.searchParams.get('chatId') || "default";
@@ -273,7 +274,7 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Route: GET /api/chats -> Alle Chats auflisten
+    // GET /api/chats -> Alle Chats auflisten
     if (req.method === 'GET' && req.url === '/api/chats') {
         const chats = fs.readdirSync(CHATS_DIR).filter(file => {
             return fs.statSync(path.join(CHATS_DIR, file)).isDirectory();
@@ -283,7 +284,7 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Route: POST /api/chats -> Neuen Chat erstellen
+    // POST /api/chats -> Neuen Chat erstellen
     if (req.method === 'POST' && req.url === '/api/chats') {
         const chatId = "Chat_" + Date.now();
         getChatDir(chatId);
@@ -293,7 +294,7 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Route: POST /api/rename -> Chat umbenennen
+    // POST /api/rename -> Chat umbenennen
     if (req.method === 'POST' && req.url === '/api/rename') {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
@@ -304,25 +305,16 @@ const server = http.createServer(async (req, res) => {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     return res.end(JSON.stringify({ error: "Fehlende Daten" }));
                 }
-                
                 const oldPath = path.join(CHATS_DIR, chatId);
                 const newPath = path.join(CHATS_DIR, newName);
-
                 if (fs.existsSync(newPath)) {
                     res.writeHead(409, { 'Content-Type': 'application/json' });
-                    return res.end(JSON.stringify({ error: "Ein Chat mit diesem Namen existiert bereits. Bitte wähle einen anderen Namen." }));
+                    return res.end(JSON.stringify({ error: "Ein Chat mit diesem Namen existiert bereits." }));
                 }
-
-                if (!fs.existsSync(oldPath)) {
-                    res.writeHead(404, { 'Content-Type': 'application/json' });
-                    return res.end(JSON.stringify({ error: "Quell-Chat nicht gefunden." }));
-                }
-
                 fs.renameSync(oldPath, newPath);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true, newChatId: newName }));
             } catch (e) {
-                console.error("Rename Error:", e);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: e.message }));
             }
@@ -330,7 +322,7 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Route: POST /api/delete -> Chat vollständig löschen
+    // POST /api/delete -> Chat vollständig löschen
     if (req.method === 'POST' && req.url === '/api/delete') {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
@@ -339,21 +331,13 @@ const server = http.createServer(async (req, res) => {
                 const { chatId } = JSON.parse(body || '{}');
                 if (!chatId) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
-                    return res.end(JSON.stringify({ error: "Keine Chat ID angegeben" }));
+                    return res.end(JSON.stringify({ error: "Keine Chat ID" }));
                 }
-                
                 const chatPath = path.join(CHATS_DIR, chatId);
-                if (fs.existsSync(chatPath)) {
-                    fs.rmSync(chatPath, { recursive: true, force: true });
-                }
-                
-                // Falls alles gelöscht wurde, erstelle sofort einen neuen Standard-Chat
+                if (fs.existsSync(chatPath)) { fs.rmSync(chatPath, { recursive: true, force: true }); }
                 if (fs.readdirSync(CHATS_DIR).length === 0) {
-                    const initialId = "Mein_erster_Chat";
-                    getChatDir(initialId);
-                    saveHistory([], initialId);
+                    const initialId = "Mein_erster_Chat"; getChatDir(initialId); saveHistory([], initialId);
                 }
-
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true }));
             } catch (e) {
@@ -364,67 +348,80 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Route: GET /api/config -> Konfiguration abrufen
+    // GET /api/config -> Konfiguration abrufen
     if (req.method === 'GET' && req.url === '/api/config') {
-        const publicConfig = {
-            APP_NAME: config.APP_NAME,
-            LOADING_TEXT: config.LOADING_TEXT
-        };
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(publicConfig));
+        res.end(JSON.stringify({ APP_NAME: config.APP_NAME, LOADING_TEXT: config.LOADING_TEXT }));
         return;
     }
 
-    // Route: POST /api/clear -> Historie löschen
+    // POST /api/clear -> Historie leeren
     if (req.method === 'POST' && req.url === '/api/clear') {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', () => {
-            const { chatId } = JSON.parse(body || '{}');
-            saveHistory([], chatId || "default");
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true }));
+            try {
+                const { chatId } = JSON.parse(body || '{}');
+                saveHistory([], chatId || "default");
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
         });
         return;
     }
 
-    // Route: POST /api/chat -> MyAI Anfrage
+    // POST /api/chat -> KI Anfrage
     if (req.method === 'POST' && req.url === '/api/chat') {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', async () => {
             try {
                 const { prompt, index, chatId } = JSON.parse(body);
-                const id = chatId || "default";
-                
                 if (!prompt) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: "Kein Prompt angegeben" }));
+                    res.end(JSON.stringify({ error: "Kein Prompt" }));
                     return;
                 }
-
-                // Falls ein Index übergeben wurde (Edit-Modus), Historie SOFORT kürzen
                 if (typeof index === 'number') {
-                    let history = loadHistory(id);
+                    let history = loadHistory(chatId);
                     if (index >= 0 && index < history.length) {
-                        console.log(`[EDIT] [${id}] Kürze Historie: Entferne alles ab Index ${index}`);
                         history = history.slice(0, index);
-                        saveHistory(history, id);
+                        saveHistory(history, chatId);
                     }
                 }
-
-                // Hier muss askGemini angepasst werden, um die chatId zu verwenden
-                const answer = await askGeminiExtended(prompt, id);
-                
+                const answer = await askGeminiExtended(prompt, chatId);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ answer }));
             } catch (err) {
-                console.error("[API ERROR]", err);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: err.message }));
             }
         });
         return;
+    }
+
+    // STATISCHE DATEIEN
+    if (req.method === 'GET') {
+        let urlPath = req.url === '/' ? '/index.html' : req.url;
+        let filePath = path.join(PUBLIC_DIR, urlPath);
+        let extname = path.extname(filePath);
+        let contentType = 'text/html';
+
+        switch (extname) {
+            case '.js': contentType = 'text/javascript'; break;
+            case '.css': contentType = 'text/css'; break;
+            case '.json': contentType = 'application/json'; break;
+            case '.png': contentType = 'image/png'; break;
+            case '.jpg': contentType = 'image/jpg'; break;
+        }
+
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+            serveFile(res, filePath, contentType);
+            return;
+        }
     }
 
     // 404
@@ -437,4 +434,3 @@ server.listen(config.PORT, () => {
 🚀 ${config.APP_NAME} läuft auf: http://localhost:${config.PORT}`);
     console.log(`Drücke Strg+C zum Beenden.`);
 });
-

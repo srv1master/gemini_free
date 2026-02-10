@@ -1,5 +1,14 @@
-oauth_creds.json
-account.json
+# Node.js
 node_modules/
 .DS_Store
-secrets.json
+
+# MyAI Data (Private & Generated)
+data/oauth_creds.json
+data/account.json
+data/secrets.json
+data/chats/
+data/history.json
+
+# Optional: Keep data directory but ignore contents
+# data/*
+# !data/.gitkeep
