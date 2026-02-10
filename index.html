@@ -54,12 +54,72 @@
             max-width: 85%;
             line-height: 1.5;
             animation: fadeIn 0.3s ease;
+            position: relative;
+            group: hover;
         }
 
         .user-message {
             background-color: var(--input-bg);
             align-self: flex-end;
             border-bottom-right-radius: 0;
+            padding-right: 2.5rem; /* Platz für Edit-Button */
+        }
+
+        .edit-btn {
+            position: absolute;
+            right: 8px;
+            top: 8px;
+            background: none;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 4px;
+            display: none;
+            transition: color 0.2s, background 0.2s;
+        }
+
+        .user-message:hover .edit-btn {
+            display: block;
+        }
+
+        .edit-btn:hover {
+            color: white;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .edit-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .edit-textarea {
+            width: 100%;
+            background: #111;
+            color: white;
+            border: 1px solid var(--accent-color);
+            border-radius: 4px;
+            padding: 8px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .edit-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .edit-actions button {
+            padding: 5px 15px;
+            font-size: 0.85rem;
+        }
+
+        .cancel-btn {
+            background-color: #555;
         }
 
         .bot-message {
@@ -152,7 +212,6 @@
     const input = document.getElementById('promptInput');
     const sendBtn = document.getElementById('sendBtn');
 
-    // Enter sendet, Shift+Enter macht neue Zeile
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -160,17 +219,18 @@
         }
     });
 
-    async function sendMessage() {
-        const text = input.value.trim();
+    async function sendMessage(textOverride = null) {
+        const text = textOverride || input.value.trim();
         if (!text) return;
 
-        // User Message anzeigen
-        appendMessage(text, 'user-message');
-        input.value = '';
+        if (!textOverride) {
+            appendMessage(text, 'user-message');
+            input.value = '';
+        }
+        
         input.disabled = true;
         sendBtn.disabled = true;
 
-        // Loading Indicator
         const loadingId = 'loading-' + Date.now();
         const loadingDiv = document.createElement('div');
         loadingDiv.id = loadingId;
@@ -187,8 +247,6 @@
             });
 
             const data = await response.json();
-            
-            // Loading entfernen
             document.getElementById(loadingId).remove();
 
             if (data.error) {
@@ -196,14 +254,13 @@
             } else {
                 appendMessage(data.answer, 'bot-message', true);
             }
-
         } catch (err) {
-            document.getElementById(loadingId).remove();
+            if (document.getElementById(loadingId)) document.getElementById(loadingId).remove();
             appendMessage(`❌ Netzwerkfehler: ${err.message}`, 'bot-message', false);
         } finally {
             input.disabled = false;
             sendBtn.disabled = false;
-            input.focus();
+            if (!textOverride) input.focus();
         }
     }
 
@@ -211,18 +268,86 @@
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${className}`;
         
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'content-wrapper';
+        
         if (isMarkdown) {
-            msgDiv.innerHTML = marked.parse(text);
-            // Syntax Highlighting anwenden
-            msgDiv.querySelectorAll('pre code').forEach((block) => {
+            contentDiv.innerHTML = marked.parse(text);
+            contentDiv.querySelectorAll('pre code').forEach((block) => {
                 hljs.highlightElement(block);
             });
         } else {
-            msgDiv.innerText = text;
+            contentDiv.innerText = text;
+        }
+        
+        msgDiv.appendChild(contentDiv);
+
+        if (className === 'user-message') {
+            const editBtn = document.createElement('button');
+            editBtn.className = 'edit-btn';
+            editBtn.innerHTML = '✎';
+            editBtn.title = 'Nachricht bearbeiten';
+            editBtn.onclick = () => startEdit(msgDiv, text);
+            msgDiv.appendChild(editBtn);
         }
         
         chatContainer.appendChild(msgDiv);
         scrollToBottom();
+    }
+
+    function startEdit(msgDiv, originalText) {
+        const contentWrapper = msgDiv.querySelector('.content-wrapper');
+        const editBtn = msgDiv.querySelector('.edit-btn');
+        
+        // Verstecke Inhalt und Edit-Button
+        contentWrapper.style.display = 'none';
+        editBtn.style.display = 'none';
+
+        const editContainer = document.createElement('div');
+        editContainer.className = 'edit-container';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'edit-textarea';
+        textarea.value = originalText;
+        
+        const actions = document.createElement('div');
+        actions.className = 'edit-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'cancel-btn';
+        cancelBtn.innerText = 'Abbrechen';
+        cancelBtn.onclick = () => {
+            editContainer.remove();
+            contentWrapper.style.display = 'block';
+            editBtn.style.display = '';
+        };
+
+        const saveBtn = document.createElement('button');
+        saveBtn.innerText = 'Speichern & Senden';
+        saveBtn.onclick = () => {
+            const newText = textarea.value.trim();
+            if (newText && newText !== originalText) {
+                editContainer.remove();
+                // Update den Text in der UI
+                contentWrapper.innerText = newText;
+                contentWrapper.style.display = 'block';
+                editBtn.style.display = '';
+                // Setze onclick neu für den nächsten Edit
+                editBtn.onclick = () => startEdit(msgDiv, newText);
+                // Erneut senden
+                sendMessage(newText);
+            } else {
+                cancelBtn.onclick();
+            }
+        };
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(saveBtn);
+        editContainer.appendChild(textarea);
+        editContainer.appendChild(actions);
+        msgDiv.appendChild(editContainer);
+        
+        textarea.focus();
     }
 
     function scrollToBottom() {

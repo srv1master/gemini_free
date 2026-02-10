@@ -5,6 +5,9 @@ Dieses Projekt ermöglicht die Nutzung des `gemini-3-flash-preview` Modells übe
 ## 🚀 Features
 - **Direkter API-Zugriff:** Nutzt interne Google Cloud Code Endpunkte.
 - **Web-Interface:** Schicker Chat-Modus mit Markdown-Support und Syntax-Highlighting.
+- **NEU: Nachrichten bearbeiten:** Korrigiere deine Prompts direkt in der UI und sende sie erneut.
+- **NEU: Auto-Token-Refresh:** Nie wieder manuell einloggen – der Server erneuert Tokens automatisch.
+- **NEU: 429-Retry-Logik:** Automatisches Warten und Wiederholen bei überlasteten Google-Servern.
 - **CLI-Tool:** Schnelle Prompts direkt aus dem Terminal.
 - **Kostenlos:** Verwendet die für IDE-Erweiterungen vorgesehenen Kontingente.
 
