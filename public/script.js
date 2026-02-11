@@ -1,22 +1,141 @@
 const chatContainer = document.getElementById('chat-container');
 const input = document.getElementById('promptInput');
+const fileInput = document.getElementById('fileInput');
+const imagePreviewContainer = document.getElementById('image-preview-container');
 const sendBtn = document.getElementById('sendBtn');
 const chatList = document.getElementById('chat-list');
-const sidebar = document.getElementById('sidebar');
-const appTitle = document.getElementById('appTitle');
+// ... (rest of vars)
 
-// Modal Elemente
-const modalOverlay = document.getElementById('modal-overlay');
-const modalTitle = document.getElementById('modal-title');
-const modalMessage = document.getElementById('modal-message');
-const modalInput = document.getElementById('modal-input');
-const modalTextarea = document.getElementById('modal-textarea');
-const modalConfirmBtn = document.getElementById('modal-confirm-btn');
-const modalCancelBtn = document.getElementById('modal-cancel-btn');
+let selectedImages = [];
 
-let currentChatId = "default";
-let APP_NAME = "MyAI";
-let LOADING_TEXT = "KI analysiert";
+// Image Handling
+fileInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files);
+    for (const file of files) {
+        if (!file.type.startsWith('image/')) continue;
+        const base64 = await toBase64(file);
+        selectedImages.push({ data: base64.split(',')[1], mimeType: file.type, preview: base64 });
+    }
+    updateImagePreview();
+    fileInput.value = ''; // Reset
+});
+
+function toBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
+}
+
+function updateImagePreview() {
+    imagePreviewContainer.innerHTML = '';
+    if (selectedImages.length > 0) {
+        imagePreviewContainer.style.display = 'flex';
+        selectedImages.forEach((img, index) => {
+            const div = document.createElement('div');
+            div.className = 'image-preview';
+            div.innerHTML = `
+                <img src="${img.preview}" alt="Preview">
+                <button class="remove-btn" onclick="removeImage(${index})">×</button>
+            `;
+            imagePreviewContainer.appendChild(div);
+        });
+    } else {
+        imagePreviewContainer.style.display = 'none';
+    }
+}
+
+window.removeImage = function(index) {
+    selectedImages.splice(index, 1);
+    updateImagePreview();
+}
+
+// ... (existing modal logic)
+
+// Update sendMessage to include images
+async function sendMessage(textOverride = null, indexToTruncate = null) {
+    const text = textOverride || input.value.trim();
+    if (!text && selectedImages.length === 0) return;
+    
+    const now = new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
+    const currentImages = [...selectedImages]; // Copy for current message
+    
+    // Clear selection immediately
+    selectedImages = [];
+    updateImagePreview();
+
+    if (indexToTruncate !== null) {
+        // ... (truncation logic)
+        appendMessage(text, 'user-message', false, indexToTruncate, now, null, null, currentImages);
+    } else if (!textOverride) {
+        appendMessage(text, 'user-message', false, chatContainer.querySelectorAll('.message').length, now, null, null, currentImages);
+        input.value = '';
+    }
+
+    input.disabled = true; sendBtn.disabled = true;
+    // ... (loading logic)
+    
+    try {
+        const response = await fetch('/api/chat', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ 
+                prompt: text, 
+                chatId: currentChatId, 
+                index: indexToTruncate,
+                images: currentImages.map(img => ({ mimeType: img.mimeType, data: img.data }))
+            }) 
+        });
+        // ... (streaming logic)
+    } 
+    // ... (error handling)
+}
+
+function appendMessage(text, className, isMarkdown = false, index = null, timestamp = null, onRetry = null, id = null, images = []) {
+    const msgDiv = document.createElement('div'); 
+    msgDiv.className = `message ${className}`; 
+    if (id) msgDiv.id = id;
+    if (index !== null) msgDiv.dataset.index = index;
+    
+    const contentDiv = document.createElement('div'); 
+    contentDiv.className = 'content-wrapper';
+    
+    // Images first
+    if (images && images.length > 0) {
+        const imgContainer = document.createElement('div');
+        imgContainer.style.display = 'flex';
+        imgContainer.style.gap = '10px';
+        imgContainer.style.marginBottom = '10px';
+        imgContainer.style.flexWrap = 'wrap';
+        images.forEach(img => {
+            const imgEl = document.createElement('img');
+            imgEl.src = img.preview || `data:${img.mimeType};base64,${img.data}`; // Handle both preview obj and history obj
+            imgEl.style.maxWidth = '200px';
+            imgEl.style.maxHeight = '200px';
+            imgEl.style.borderRadius = '5px';
+            imgEl.style.border = '1px solid #444';
+            imgContainer.appendChild(imgEl);
+        });
+        contentDiv.appendChild(imgContainer);
+    }
+
+    if (isMarkdown && text) { 
+        // ... (markdown logic)
+        const mdDiv = document.createElement('div');
+        mdDiv.innerHTML = marked.parse(text);
+        mdDiv.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+        addCopyButtons(mdDiv);
+        contentDiv.appendChild(mdDiv);
+    } else { 
+        const txtDiv = document.createElement('div');
+        txtDiv.innerText = text; 
+        contentDiv.appendChild(txtDiv);
+    }
+    
+    msgDiv.appendChild(contentDiv);
+    // ... (rest of appendMessage)
 
 // Modal Logik
 function showModal({ title, message, showInput = false, inputType = 'input', defaultValue = "", confirmLabel = "OK", onConfirm }) {
@@ -309,19 +428,24 @@ async function sendMessage(textOverride = null, indexToTruncate = null) {
     const text = textOverride || input.value.trim();
     if (!text) return;
     const now = new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin' });
+    
     if (indexToTruncate !== null) {
-        Array.from(chatContainer.querySelectorAll('.message')).forEach(m => { if (m.dataset.index !== undefined && parseInt(m.dataset.index) >= indexToTruncate) m.remove(); });
+        Array.from(chatContainer.querySelectorAll('.message')).forEach(m => { 
+            if (m.dataset.index !== undefined && parseInt(m.dataset.index) >= indexToTruncate) m.remove(); 
+        });
         appendMessage(text, 'user-message', false, indexToTruncate, now);
     } else if (!textOverride) {
         appendMessage(text, 'user-message', false, chatContainer.querySelectorAll('.message').length, now);
         input.value = '';
     }
+
     input.disabled = true; sendBtn.disabled = true;
     const loadingId = 'loading-' + Date.now();
     const loadingDiv = document.createElement('div');
     loadingDiv.id = loadingId; loadingDiv.className = 'message bot-message loading';
     loadingDiv.innerHTML = `${LOADING_TEXT}<span class="dots"><span>.</span><span>.</span><span>.</span></span> <span class="timer" id="timer-${loadingId}">00:00:00.0</span>`;
     chatContainer.appendChild(loadingDiv); scrollToBottom();
+    
     let seconds = 0;
     const timerElement = document.getElementById(`timer-${loadingId}`);
     const timerInterval = setInterval(() => {
@@ -329,49 +453,139 @@ async function sendMessage(textOverride = null, indexToTruncate = null) {
         const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); const s = seconds % 60;
         timerElement.innerText = h.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ':' + s.toFixed(1).padStart(4, '0');
     }, 100);
+
     try {
-        const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: text, chatId: currentChatId, index: indexToTruncate }) });
-        const data = await response.json(); clearInterval(timerInterval); document.getElementById(loadingId).remove();
-        if (data.error) {
-            const isOverloaded = data.error.includes("429") || data.error.includes("RESOURCE_EXHAUSTED");
-            appendMessage(isOverloaded ? "Ich bin gerade überlastet." : `❌ Fehler: ${data.error}`, 'bot-message error-message', false, null, null, isOverloaded ? () => {
-                const last = chatContainer.lastElementChild; if (last) last.remove(); sendMessage(text, indexToTruncate);
-            } : null);
-        } else { appendMessage(data.answer.text, 'bot-message', true, chatContainer.querySelectorAll('.message').length, data.answer.timestamp); }
-    } catch (err) { clearInterval(timerInterval); if (document.getElementById(loadingId)) document.getElementById(loadingId).remove(); appendMessage(`❌ Netzwerkfehler: ${err.message}`, 'bot-message error-message', false); }
-    finally { input.disabled = false; sendBtn.disabled = false; if (!textOverride) input.focus(); }
+        const response = await fetch('/api/chat', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ prompt: text, chatId: currentChatId, index: indexToTruncate }) 
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || "Streaming failed");
+        }
+
+        clearInterval(timerInterval);
+        document.getElementById(loadingId).remove();
+
+        // Initialisiere leere Bot-Nachricht für Streaming
+        const botMsgId = 'bot-' + Date.now();
+        const botIndex = chatContainer.querySelectorAll('.message').length;
+        appendMessage("", 'bot-message', true, botIndex, null, null, botMsgId);
+        const botMsgDiv = document.getElementById(botMsgId);
+        const contentDiv = botMsgDiv.querySelector('.content-wrapper');
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullBotText = "";
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        if (data.chunk) {
+                            fullBotText += data.chunk;
+                            contentDiv.innerHTML = marked.parse(fullBotText);
+                            // Highlight Code Blocks in-place
+                            contentDiv.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+                            // Add Copy Buttons
+                            addCopyButtons(contentDiv);
+                            scrollToBottom();
+                        } else if (data.done) {
+                            const timeSpan = document.createElement('span');
+                            timeSpan.className = 'message-time';
+                            timeSpan.innerText = data.timestamp;
+                            botMsgDiv.appendChild(timeSpan);
+                        }
+                    } catch (e) { /* Partials */ }
+                }
+            }
+        }
+    } catch (err) {
+        clearInterval(timerInterval);
+        if (document.getElementById(loadingId)) document.getElementById(loadingId).remove();
+        const isOverloaded = err.message.includes("429") || err.message.includes("RESOURCE_EXHAUSTED");
+        appendMessage(isOverloaded ? "Ich bin gerade überlastet." : `❌ Fehler: ${err.message}`, 'bot-message error-message', false, null, null, isOverloaded ? () => {
+            const last = chatContainer.lastElementChild; if (last) last.remove(); sendMessage(text, indexToTruncate);
+        } : null);
+    } finally {
+        input.disabled = false; sendBtn.disabled = false;
+        if (!textOverride) input.focus();
+    }
 }
 
-function appendMessage(text, className, isMarkdown = false, index = null, timestamp = null, onRetry = null) {
-    const msgDiv = document.createElement('div'); msgDiv.className = `message ${className}`; if (index !== null) msgDiv.dataset.index = index;
-    const contentDiv = document.createElement('div'); contentDiv.className = 'content-wrapper';
-    if (isMarkdown) { 
+function addCopyButtons(container) {
+    container.querySelectorAll('pre').forEach((pre) => {
+        if (pre.querySelector('.copy-code-btn')) return; // Already has button
+        const codeBlock = pre.querySelector('code');
+        if (codeBlock) {
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'copy-code-btn';
+            copyBtn.innerText = 'Kopieren';
+            copyBtn.onclick = () => {
+                const code = codeBlock.innerText;
+                navigator.clipboard.writeText(code).then(() => {
+                    copyBtn.innerText = 'Kopiert!';
+                    copyBtn.classList.add('copied');
+                    setTimeout(() => { copyBtn.innerText = 'Kopieren'; copyBtn.classList.remove('copied'); }, 2000);
+                });
+            };
+            pre.appendChild(copyBtn);
+        }
+    });
+}
+
+function appendMessage(text, className, isMarkdown = false, index = null, timestamp = null, onRetry = null, id = null) {
+    const msgDiv = document.createElement('div'); 
+    msgDiv.className = `message ${className}`; 
+    if (id) msgDiv.id = id;
+    if (index !== null) msgDiv.dataset.index = index;
+    
+    const contentDiv = document.createElement('div'); 
+    contentDiv.className = 'content-wrapper';
+    
+    if (isMarkdown && text) { 
         contentDiv.innerHTML = marked.parse(text); 
-        contentDiv.querySelectorAll('pre').forEach((pre) => {
-            const codeBlock = pre.querySelector('code');
-            if (codeBlock) {
-                hljs.highlightElement(codeBlock);
-                const copyBtn = document.createElement('button');
-                copyBtn.className = 'copy-code-btn';
-                copyBtn.innerText = 'Kopieren';
-                copyBtn.onclick = () => {
-                    const code = codeBlock.innerText;
-                    navigator.clipboard.writeText(code).then(() => {
-                        copyBtn.innerText = 'Kopiert!';
-                        copyBtn.classList.add('copied');
-                        setTimeout(() => { copyBtn.innerText = 'Kopieren'; copyBtn.classList.remove('copied'); }, 2000);
-                    });
-                };
-                pre.appendChild(copyBtn);
-            }
-        });
+        contentDiv.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+        addCopyButtons(contentDiv);
+    } else { 
+        contentDiv.innerText = text; 
     }
-    else { contentDiv.innerText = text; }
+    
     msgDiv.appendChild(contentDiv);
-    if (timestamp) { const timeSpan = document.createElement('span'); timeSpan.className = 'message-time'; timeSpan.innerText = timestamp; msgDiv.appendChild(timeSpan); }
-    if (onRetry) { const rb = document.createElement('button'); rb.className = 'retry-btn'; rb.innerText = 'Nochmal versuchen'; rb.onclick = onRetry; msgDiv.appendChild(rb); }
-    if (className.includes('user-message')) { const eb = document.createElement('button'); eb.className = 'edit-btn'; eb.innerHTML = '✎'; eb.onclick = () => startEdit(msgDiv, text, index); msgDiv.appendChild(eb); }
-    chatContainer.appendChild(msgDiv); scrollToBottom();
+    if (timestamp) { 
+        const timeSpan = document.createElement('span'); 
+        timeSpan.className = 'message-time'; 
+        timeSpan.innerText = timestamp; 
+        msgDiv.appendChild(timeSpan); 
+    }
+    
+    if (onRetry) { 
+        const rb = document.createElement('button'); 
+        rb.className = 'retry-btn'; 
+        rb.innerText = 'Nochmal versuchen'; 
+        rb.onclick = onRetry; 
+        msgDiv.appendChild(rb); 
+    }
+    
+    if (className.includes('user-message')) { 
+        const eb = document.createElement('button'); 
+        eb.className = 'edit-btn'; 
+        eb.innerHTML = '✎'; 
+        eb.onclick = () => startEdit(msgDiv, text, index); 
+        msgDiv.appendChild(eb); 
+    }
+    
+    chatContainer.appendChild(msgDiv); 
+    scrollToBottom();
 }
 
 function startEdit(msgDiv, originalText, index) {

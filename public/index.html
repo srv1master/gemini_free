@@ -40,7 +40,10 @@
     </div>
 
     <footer class="input-area">
+        <div id="image-preview-container"></div>
         <div class="input-wrapper">
+            <label for="fileInput" class="upload-btn" title="Bild hochladen">📎</label>
+            <input type="file" id="fileInput" accept="image/*" multiple style="display: none;">
             <textarea id="promptInput" placeholder="Eingabe an MyAI... (Shift+Enter für neue Zeile)"></textarea>
             <button id="sendBtn" onclick="sendMessage()">Senden</button>
         </div>

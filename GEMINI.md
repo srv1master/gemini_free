@@ -8,11 +8,15 @@ Dieses Projekt ist eine hochgradig optimierte, anonymisierte Implementierung zur
 - **API:** Google Cloud Code Internal API
 - **UI:** Modern HTML5/CSS3/JS (Custom Modals, Sidebar, Multi-Chat)
 
-## 📁 Optimized Structure (v1.5.0)
+## 📁 Optimized Structure (v1.6.0)
 - **`/src`**: Enthält die Programmlogik.
-  - `server.js`: Der portable Proxy-Server.
+  - `server.js`: Der portable Proxy-Server (Entry Point).
   - `standalone.js`: OAuth2-Authentifizierungs-Tool.
   - `gemini-direct.js`: CLI-Schnittstelle.
+  - **`/lib`**: Modulare Kern-Logik.
+    - `api-client.js`: Google API Kommunikation & Backoff.
+    - `config-manager.js`: Konfigurations- & Master-Prompt-Handling.
+    - `history-manager.js`: Chat- & Historien-Verwaltung.
 - **`/public`**: Enthält die Frontend-Dateien.
   - `index.html`: Das MyAI Control Panel.
 - **`/data`**: Zentraler Speicher für Konfiguration und Benutzerdaten.

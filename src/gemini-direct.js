@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-const fs = require('fs');
-const path = require('path');
+const apiClient = require('./lib/api-client');
+const configManager = require('./lib/config-manager');
 
 async function run() {
     const userPrompt = process.argv.slice(2).join(' ');
@@ -9,62 +9,12 @@ async function run() {
         process.exit(0);
     }
 
-    const scriptDir = __dirname;
-    const dataDir = path.join(scriptDir, 'data');
-    const credsField = path.join(dataDir, 'oauth_creds.json');
-    const installIdFile = path.join(dataDir, 'installation_id');
-    
+    const config = configManager.loadConfig();
+    const chatId = config.LAST_CHAT_ID || "CLI_Session";
+
     try {
-        if (!fs.existsSync(credsField)) {
-            throw new Error(`Credentials nicht gefunden unter: ${credsField}`);
-        }
-
-        const creds = JSON.parse(fs.readFileSync(credsField, 'utf8'));
-        const installId = fs.readFileSync(installIdFile, 'utf8').trim();
-        const accessToken = creds.access_token;
-
-        const headers = {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'User-Agent': 'GeminiCLI/0.27.3',
-            'x-gemini-api-privileged-user-id': installId
-        };
-
-        // Project ID abrufen
-        const loadResp = await fetch('https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist', {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({
-                metadata: { ideType: "IDE_UNSPECIFIED", platform: "PLATFORM_UNSPECIFIED", pluginType: "GEMINI" }
-            })
-        });
-
-        const loadData = await loadResp.json();
-        const projectId = loadData.cloudaicompanionProject;
-        if (!projectId) {
-            console.error("DEBUG: loadCodeAssist Antwort:", JSON.stringify(loadData, null, 2));
-            throw new Error("Keine Project ID gefunden.");
-        }
-
-        // Anfrage an Gemini
-        const genResp = await fetch('https://cloudcode-pa.googleapis.com/v1internal:generateContent', {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({
-                model: "gemini-3-flash-preview", 
-                project: projectId,
-                request: {
-                    contents: [{ role: "user", parts: [{ text: userPrompt }] }]
-                }
-            })
-        });
-
-        const genData = await genResp.json();
-        if (genData.response && genData.response.candidates) {
-            console.log(genData.response.candidates[0].content.parts[0].text);
-        } else {
-            console.error("API Fehler:", JSON.stringify(genData, null, 2));
-        }
+        const response = await apiClient.askGemini(userPrompt, chatId);
+        console.log(response.text);
     } catch (err) {
         console.error("Fehler:", err.message);
         process.exit(1);
